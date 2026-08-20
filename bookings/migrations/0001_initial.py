@@ -7,88 +7,221 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='BookingChangeRequest',
+            name="BookingChangeRequest",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('new_start_date', models.DateField(blank=True, null=True)),
-                ('new_end_date', models.DateField(blank=True, null=True)),
-                ('new_time_slot', models.CharField(blank=True, choices=[('MORNING', 'Morning'), ('AFTERNOON', 'Afternoon'), ('EVENING', 'Evening'), ('ALL_DAY', 'All Day')], max_length=15, null=True)),
-                ('status', models.CharField(choices=[('PENDING', 'Pending Approval'), ('APPROVED', 'Confirmed'), ('REJECTED', 'Rejected')], default='PENDING', max_length=10)),
-                ('rejection_reason', models.TextField(blank=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("new_start_date", models.DateField(blank=True, null=True)),
+                ("new_end_date", models.DateField(blank=True, null=True)),
+                (
+                    "new_time_slot",
+                    models.CharField(
+                        blank=True,
+                        choices=[
+                            ("MORNING", "Morning"),
+                            ("AFTERNOON", "Afternoon"),
+                            ("EVENING", "Evening"),
+                            ("ALL_DAY", "All Day"),
+                        ],
+                        max_length=15,
+                        null=True,
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("PENDING", "Pending Approval"),
+                            ("APPROVED", "Confirmed"),
+                            ("REJECTED", "Rejected"),
+                        ],
+                        default="PENDING",
+                        max_length=10,
+                    ),
+                ),
+                ("rejection_reason", models.TextField(blank=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
         ),
         migrations.CreateModel(
-            name='CateringRequest',
+            name="CateringRequest",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('status', models.CharField(choices=[('PENDING', 'Pending Approval'), ('APPROVED', 'Confirmed'), ('REJECTED', 'Rejected')], default='PENDING', max_length=10)),
-                ('requires_teas', models.BooleanField(default=False)),
-                ('requires_drinks', models.BooleanField(default=False)),
-                ('rejection_reason', models.TextField(blank=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("PENDING", "Pending Approval"),
+                            ("APPROVED", "Confirmed"),
+                            ("REJECTED", "Rejected"),
+                        ],
+                        default="PENDING",
+                        max_length=10,
+                    ),
+                ),
+                ("requires_teas", models.BooleanField(default=False)),
+                ("requires_drinks", models.BooleanField(default=False)),
+                ("rejection_reason", models.TextField(blank=True)),
             ],
         ),
         migrations.CreateModel(
-            name='Fixture',
+            name="Fixture",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('opponent', models.CharField(max_length=150)),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField()),
-                ('play_cricket_id', models.CharField(blank=True, max_length=50, null=True, unique=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("opponent", models.CharField(max_length=150)),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField()),
+                (
+                    "play_cricket_id",
+                    models.CharField(blank=True, max_length=50, null=True, unique=True),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='Pitch',
+            name="Pitch",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=50)),
-                ('pitch_type', models.CharField(choices=[('GRASS', 'Grass'), ('ASTRO', 'Artificial / Astro')], max_length=10)),
-                ('is_active', models.BooleanField(default=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=50)),
+                (
+                    "pitch_type",
+                    models.CharField(
+                        choices=[("GRASS", "Grass"), ("ASTRO", "Artificial / Astro")],
+                        max_length=10,
+                    ),
+                ),
+                ("is_active", models.BooleanField(default=True)),
             ],
         ),
         migrations.CreateModel(
-            name='PitchBooking',
+            name="PitchBooking",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField()),
-                ('time_slot', models.CharField(choices=[('MORNING', 'Morning'), ('AFTERNOON', 'Afternoon'), ('EVENING', 'Evening'), ('ALL_DAY', 'All Day')], default='ALL_DAY', max_length=15)),
-                ('requires_teas', models.BooleanField(default=False)),
-                ('requires_drinks', models.BooleanField(default=False)),
-                ('external_contact_name', models.CharField(blank=True, max_length=100)),
-                ('external_contact_email', models.EmailField(blank=True, max_length=254)),
-                ('status', models.CharField(choices=[('PENDING', 'Pending Approval'), ('APPROVED', 'Confirmed'), ('DENIED', 'Denied')], default='PENDING', max_length=10)),
-                ('rejection_reason', models.TextField(blank=True)),
-                ('notes', models.TextField(blank=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField()),
+                (
+                    "time_slot",
+                    models.CharField(
+                        choices=[
+                            ("MORNING", "Morning"),
+                            ("AFTERNOON", "Afternoon"),
+                            ("EVENING", "Evening"),
+                            ("ALL_DAY", "All Day"),
+                        ],
+                        default="ALL_DAY",
+                        max_length=15,
+                    ),
+                ),
+                ("requires_teas", models.BooleanField(default=False)),
+                ("requires_drinks", models.BooleanField(default=False)),
+                ("external_contact_name", models.CharField(blank=True, max_length=100)),
+                (
+                    "external_contact_email",
+                    models.EmailField(blank=True, max_length=254),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("PENDING", "Pending Approval"),
+                            ("APPROVED", "Confirmed"),
+                            ("DENIED", "Denied"),
+                        ],
+                        default="PENDING",
+                        max_length=10,
+                    ),
+                ),
+                ("rejection_reason", models.TextField(blank=True)),
+                ("notes", models.TextField(blank=True)),
             ],
         ),
         migrations.CreateModel(
-            name='PitchLength',
+            name="PitchLength",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('length_yards', models.IntegerField(unique=True)),
-                ('description', models.CharField(max_length=50)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("length_yards", models.IntegerField(unique=True)),
+                ("description", models.CharField(max_length=50)),
             ],
         ),
         migrations.CreateModel(
-            name='Team',
+            name="Team",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100)),
-                ('is_external', models.BooleanField(default=False)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100)),
+                ("is_external", models.BooleanField(default=False)),
             ],
         ),
         migrations.CreateModel(
-            name='Venue',
+            name="Venue",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
     ]

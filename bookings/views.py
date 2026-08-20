@@ -1,5 +1,14 @@
 from rest_framework import viewsets
-from .models import Venue, Pitch, Team, Fixture, PitchBooking, PitchLength, CateringRequest, BookingChangeRequest
+from .models import (
+    Venue,
+    Pitch,
+    Team,
+    Fixture,
+    PitchBooking,
+    PitchLength,
+    CateringRequest,
+    BookingChangeRequest,
+)
 from .serializers import (
     VenueSerializer,
     PitchSerializer,
@@ -54,28 +63,29 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
     serializer_class = PitchBookingSerializer
 
     def get_permissions(self):
-        if self.action in ['create', 'destroy']:
+        if self.action in ["create", "destroy"]:
             # Either Secretary or Team Manager
             return [IsAuthenticated()]
-        if self.action in ['update', 'partial_update']:
+        if self.action in ["update", "partial_update"]:
             return [IsAuthenticated()]
         return [IsAuthenticatedOrReadOnly()]
+
 
 class CateringRequestViewSet(viewsets.ModelViewSet):
     queryset = CateringRequest.objects.all()
     serializer_class = CateringRequestSerializer
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PUT', 'PATCH']:
+        if self.request.method in ["POST", "PUT", "PATCH"]:
             return [IsCaterer()]
         return [IsAuthenticatedOrReadOnly()]
+
 
 class BookingChangeRequestViewSet(viewsets.ModelViewSet):
     queryset = BookingChangeRequest.objects.all()
     serializer_class = BookingChangeRequestSerializer
 
     def get_permissions(self):
-        if self.request.method in ['POST', 'PUT', 'PATCH']:
+        if self.request.method in ["POST", "PUT", "PATCH"]:
             return [IsFixtureSecretary()]
         return [IsAuthenticatedOrReadOnly()]
-

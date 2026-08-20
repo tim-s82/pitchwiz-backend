@@ -1,5 +1,14 @@
 from rest_framework import serializers
-from .models import Venue, Pitch, PitchLength, Team, Fixture, PitchBooking, CateringRequest, BookingChangeRequest
+from .models import (
+    Venue,
+    Pitch,
+    PitchLength,
+    Team,
+    Fixture,
+    PitchBooking,
+    CateringRequest,
+    BookingChangeRequest,
+)
 
 
 class VenueSerializer(serializers.ModelSerializer):
@@ -60,10 +69,12 @@ class PitchBookingSerializer(serializers.ModelSerializer):
             "rejection_reason",
         ]
 
+
 class CateringRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = CateringRequest
         fields = "__all__"
+
 
 class BookingChangeRequestSerializer(serializers.ModelSerializer):
     class Meta:
