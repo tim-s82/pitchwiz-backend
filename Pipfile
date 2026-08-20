@@ -6,6 +6,9 @@ name = "pypi"
 [packages]
 django = "*"
 djangorestframework = "*"
+psycopg2-binary = "*"
+dj-database-url = "*"
+python-dotenv = "*"
 
 [dev-packages]
 black = "*"
