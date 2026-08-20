@@ -9,7 +9,7 @@ djangorestframework = "*"
 psycopg2-binary = "*"
 dj-database-url = "*"
 python-dotenv = "*"
-
+gunicorn = "*"
 [dev-packages]
 black = "*"
 pylint = "*"
