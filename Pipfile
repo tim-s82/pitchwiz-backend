@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+django = "*"
+djangorestframework = "*"
+psycopg2-binary = "*"
+dj-database-url = "*"
+python-dotenv = "*"
+gunicorn = "*"
+whitenoise = "*"
+djangorestframework-simplejwt = "*"
+
+[dev-packages]
+black = "*"
+pylint = "*"
+pytest = "*"
+isort = "*"
+
+[requires]
+python_version = "3.14"
