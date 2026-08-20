@@ -45,3 +45,8 @@ class IsAdminOrManagerOrSecretaryOrReadOnly(BasePermission):
             User.Role.USER_MANAGER in request.user.roles or
             User.Role.FIXTURE_SECRETARY in request.user.roles
         ))
+
+class IsExternal(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and User.Role.EXTERNAL in request.user.roles)
+
