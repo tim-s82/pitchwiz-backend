@@ -11,6 +11,7 @@ dj-database-url = "*"
 python-dotenv = "*"
 gunicorn = "*"
 whitenoise = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 black = "*"
