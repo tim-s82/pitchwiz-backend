@@ -18,8 +18,14 @@ router.register(r"pitchlengths", PitchLengthViewSet, basename="pitchlength")
 router.register(r"teams", TeamViewSet, basename="team")
 router.register(r"fixtures", FixtureViewSet, basename="fixture")
 router.register(r"pitchbookings", PitchBookingViewSet, basename="pitchbooking")
-router.register(r"catering-requests", CateringRequestViewSet, basename="catering-request")
-router.register(r"booking-change-requests", BookingChangeRequestViewSet, basename="booking-change-request")
+router.register(
+    r"catering-requests", CateringRequestViewSet, basename="catering-request"
+)
+router.register(
+    r"booking-change-requests",
+    BookingChangeRequestViewSet,
+    basename="booking-change-request",
+)
 
 urlpatterns = [
     path("", include(router.urls)),

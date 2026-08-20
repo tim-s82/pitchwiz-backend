@@ -126,9 +126,7 @@ class BookingChangeRequest(models.Model):
     original_booking = models.ForeignKey(
         PitchBooking, on_delete=models.CASCADE, related_name="change_requests"
     )
-    requested_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE
-    )
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     new_pitch = models.ForeignKey(
         Pitch, on_delete=models.CASCADE, null=True, blank=True
     )
