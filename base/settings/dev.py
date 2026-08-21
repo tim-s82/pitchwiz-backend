@@ -20,7 +20,8 @@ RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-CORS_ALLOWED_ORIGINS = [
-    "https://pitchwiz-backend-dev.onrender.com",
-    "https://pitchwiz-frontend-4tyqy02xm-tim-s82s-projects.vercel.app"
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"https://pitchwiz-frontend-[a-z0-9]{9}-tim-s82s-projects.vercel.app/"
 ]
+
+CORS_URLS_REGEX = r'^/api/.*$' 
