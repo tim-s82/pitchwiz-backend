@@ -6,7 +6,7 @@ import dj_database_url
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 DATABASES = {
     "default": dj_database_url.config(
@@ -20,6 +20,6 @@ RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://pitchwiz-frontend-.*\.vercel\.app$"
+CORS_ALLOWED_ORIGINS = [
+    "https://pitchwiz-frontend.vercel.app"
 ]
