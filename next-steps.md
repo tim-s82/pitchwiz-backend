@@ -3,6 +3,8 @@ Next steps for implementation:
 * Bug in calendar view - at one venue, there are three pitches. The main pitch blocks the two youth pitches, and each youth pitch in turn blocks the main pitch (but not each other). In the calendar view, youth pitch 1 correctly shows the main pitch as blocked, but the youth pitch 2 does not. The flag to indicate blocking of the pitch is correctly set in metadata but for some reason this is not being reflected in the calendar view. Need to thoroughly investigate and resolve.
 * Venue/Pitch columns on the calendar view should be sorted consistently (alphabetically)
 * Pitch booking request form to filter teams based on the selected pitch (i.e. compatible pitch lengths)
+* Add groundstaff role which has view access to fixtures, and can block pitches or whole venues for ground maintenance
+* Need to add nets (lanes 1, 2 and 3) as bookable options, plus outfield only for training. These could either be listed as pitches, or perhaps could be marked as training facilities. If outfield is listed as a training facility, would need to ensure that it still blocks the main square and youth pitches.
 * Bookings to be editable/cancellable by fixture secretaries
 * For Fixture Secretary - add a view of all bookings and their current status (pending, confirmed, rejected)
 * For Team Managers - add a view of their bookings and their status
