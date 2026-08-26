@@ -26,7 +26,10 @@ from users.permissions import (
     IsTeamManager,
 )
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from django.http import JsonResponse
 
+def health_check(request):
+    return JsonResponse({"status": "awake"})
 
 class VenueViewSet(viewsets.ModelViewSet):
     queryset = Venue.objects.all()

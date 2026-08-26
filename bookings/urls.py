@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    health_check,
     VenueViewSet,
     PitchViewSet,
     TeamViewSet,
@@ -29,4 +30,5 @@ router.register(
 
 urlpatterns = [
     path("", include(router.urls)),
+    path('api/health/', health_check, name='health_check'),
 ]
