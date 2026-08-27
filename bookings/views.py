@@ -1,35 +1,41 @@
+from django.http import JsonResponse
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
+
+from users.permissions import (
+    IsAdminOrManagerOrSecretaryOrReadOnly,
+    IsBookingOwnerOrSecretary,
+    IsCaterer,
+    IsFixtureManagerOrReadOnly,
+    IsFixtureSecretary,
+    IsTeamManager,
+)
+
 from .models import (
-    Venue,
-    Pitch,
-    Team,
+    BookingChangeRequest,
+    CateringRequest,
     Fixture,
+    Pitch,
     PitchBooking,
     PitchLength,
-    CateringRequest,
-    BookingChangeRequest,
+    Team,
+    Venue,
 )
 from .serializers import (
-    VenueSerializer,
-    PitchSerializer,
-    TeamSerializer,
+    BookingChangeRequestSerializer,
+    CateringRequestSerializer,
     FixtureSerializer,
     PitchBookingSerializer,
     PitchLengthSerializer,
-    CateringRequestSerializer,
-    BookingChangeRequestSerializer,
+    PitchSerializer,
+    TeamSerializer,
+    VenueSerializer,
 )
-from users.permissions import (
-    IsAdminOrManagerOrSecretaryOrReadOnly,
-    IsFixtureSecretary,
-    IsCaterer,
-    IsTeamManager,
-)
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
-from django.http import JsonResponse
+
 
 def health_check(request):
     return JsonResponse({"status": "awake"})
+
 
 class VenueViewSet(viewsets.ModelViewSet):
     queryset = Venue.objects.all()
@@ -58,7 +64,7 @@ class TeamViewSet(viewsets.ModelViewSet):
 class FixtureViewSet(viewsets.ModelViewSet):
     queryset = Fixture.objects.all()
     serializer_class = FixtureSerializer
-    permission_classes = [IsAdminOrManagerOrSecretaryOrReadOnly]
+    permission_classes = [IsFixtureManagerOrReadOnly]
 
 
 class PitchBookingViewSet(viewsets.ModelViewSet):
@@ -66,11 +72,8 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
     serializer_class = PitchBookingSerializer
 
     def get_permissions(self):
-        if self.action in ["create", "destroy"]:
-            # Either Secretary or Team Manager
-            return [IsAuthenticated()]
-        if self.action in ["update", "partial_update"]:
-            return [IsAuthenticated()]
+        if self.action in ["create", "destroy", "update", "partial_update"]:
+            return [IsAuthenticated(), IsBookingOwnerOrSecretary()]
         return [IsAuthenticatedOrReadOnly()]
 
 

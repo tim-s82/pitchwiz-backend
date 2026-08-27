@@ -1,10 +1,11 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from .serializers import UserSerializer, UserCreateSerializer, ChangePasswordSerializer
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from .permissions import IsUserManager
+from .serializers import ChangePasswordSerializer, UserCreateSerializer, UserSerializer
 
 User = get_user_model()
 
