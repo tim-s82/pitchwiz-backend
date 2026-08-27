@@ -1,8 +1,16 @@
 # pyrefly: ignore [missing-import]
 from django.contrib import admin
-from .models import Venue,PitchLength,Pitch,Team,Fixture,PitchBooking,CateringRequest,BookingChangeRequest
 
-
+from .models import (
+    BookingChangeRequest,
+    CateringRequest,
+    Fixture,
+    Pitch,
+    PitchBooking,
+    PitchLength,
+    Team,
+    Venue,
+)
 
 # Register your models here.
 admin.site.register(Venue)
