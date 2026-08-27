@@ -1,9 +1,11 @@
 from datetime import date
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from bookings.models import Fixture, Pitch, PitchBooking, PitchLength, Team, Venue
+
+User = get_user_model()
 
 
 class VenueModelTest(TestCase):
@@ -65,9 +67,8 @@ class TeamModelTest(TestCase):
         )
 
     def test_create_internal_team(self):
-        team = Team.objects.create(
-            name="U13s Boys", manager=self.manager, required_length=self.length_19
-        )
+        team = Team.objects.create(name="U13s Boys", required_length=self.length_19)
+        team.managers.add(self.manager)
         self.assertEqual(team.name, "U13s Boys")
         self.assertFalse(team.is_external)
         self.assertEqual(str(team), "U13s Boys")

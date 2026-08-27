@@ -1,13 +1,19 @@
-from rest_framework.test import APITestCase
-from rest_framework import status
-from django.urls import reverse
-from bookings.models import Venue, Pitch, PitchLength, Team, Fixture, PitchBooking
-from django.contrib.auth.models import User
 from datetime import date
+
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from bookings.models import Fixture, Pitch, PitchBooking, PitchLength, Team, Venue
+
+User = get_user_model()
 
 
 class VenueAPITest(APITestCase):
     def setUp(self):
+        self.user = User.objects.create_user(username="testuser", password="password")
+        self.client.force_authenticate(user=self.user)
         self.venue1 = Venue.objects.create(name="Main Ground")
         self.venue2 = Venue.objects.create(name="School Ground")
         # DRF ViewSets automatically create URL names like 'venue-list'
@@ -23,6 +29,8 @@ class VenueAPITest(APITestCase):
 
 class PitchAPITest(APITestCase):
     def setUp(self):
+        self.user = User.objects.create_user(username="testuser", password="password")
+        self.client.force_authenticate(user=self.user)
         self.venue = Venue.objects.create(name="Main Ground")
         self.length_19 = PitchLength.objects.create(
             length_yards=19, description="19 Yards"
@@ -48,16 +56,17 @@ class TeamAPITest(APITestCase):
         self.manager = User.objects.create_user(
             username="testmanager", password="password"
         )
+        self.client.force_authenticate(user=self.manager)
         self.pitch_length_19 = PitchLength.objects.create(
             length_yards=19, description="19 Yards"
         )
 
         self.team1 = Team.objects.create(
             name="U13s Boys",
-            manager=self.manager,
             required_length=self.pitch_length_19,
             is_external=False,
         )
+        self.team1.managers.add(self.manager)
         self.team2 = Team.objects.create(name="Dorset Cricket", is_external=True)
         self.url = reverse("team-list")
 
@@ -81,6 +90,8 @@ class TeamAPITest(APITestCase):
 
 class FixtureAPITest(APITestCase):
     def setUp(self):
+        self.user = User.objects.create_user(username="testuser", password="password")
+        self.client.force_authenticate(user=self.user)
         self.team = Team.objects.create(name="1st XI")
         self.fixture1 = Fixture.objects.create(
             team=self.team,
@@ -116,6 +127,8 @@ class FixtureAPITest(APITestCase):
 
 class PitchBookingAPITest(APITestCase):
     def setUp(self):
+        self.user = User.objects.create_user(username="fixturesec", password="password")
+        self.client.force_authenticate(user=self.user)
         self.venue = Venue.objects.create(name="Main Ground")
         self.pitch = Pitch.objects.create(
             venue=self.venue, name="Pitch 1", pitch_type="GRASS"
@@ -127,7 +140,6 @@ class PitchBookingAPITest(APITestCase):
             start_date=date(2026, 7, 10),
             end_date=date(2026, 7, 10),
         )
-        self.user = User.objects.create_user(username="fixturesec", password="password")
 
         self.booking1 = PitchBooking.objects.create(
             fixture=self.fixture,
@@ -177,3 +189,66 @@ class PitchBookingAPITest(APITestCase):
         self.assertEqual(response.data[1]["time_slot"], "ALL_DAY")
         self.assertEqual(response.data[1]["external_contact_name"], "John Doe")
         self.assertEqual(response.data[1]["status"], "APPROVED")
+
+
+class PitchBookingPermissionsAPITest(APITestCase):
+    def setUp(self):
+        # Create users
+        self.sec = User.objects.create_user(
+            username="secretary", password="pw", roles=["FIXTURE_SECRETARY"]
+        )
+        self.mgr1 = User.objects.create_user(
+            username="manager1", password="pw", roles=["TEAM_MANAGER"]
+        )
+        self.mgr2 = User.objects.create_user(
+            username="manager2", password="pw", roles=["TEAM_MANAGER"]
+        )
+
+        self.venue = Venue.objects.create(name="Main Ground")
+        self.pitch = Pitch.objects.create(
+            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
+        )
+
+        # Create booking requested by mgr1
+        self.booking = PitchBooking.objects.create(
+            pitch=self.pitch,
+            start_date=date(2026, 7, 20),
+            end_date=date(2026, 7, 20),
+            time_slot="MORNING",
+            requested_by=self.mgr1,
+            status="PENDING",
+        )
+        self.url = reverse("pitchbooking-detail", args=[self.booking.id])
+
+    def test_secretary_can_update_booking(self):
+        self.client.force_authenticate(user=self.sec)
+        response = self.client.patch(self.url, {"time_slot": "EVENING"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.time_slot, "EVENING")
+
+    def test_secretary_can_delete_booking(self):
+        self.client.force_authenticate(user=self.sec)
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(PitchBooking.objects.filter(id=self.booking.id).exists())
+
+    def test_owner_can_update_booking(self):
+        self.client.force_authenticate(user=self.mgr1)
+        response = self.client.patch(self.url, {"time_slot": "EVENING"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_owner_can_delete_booking(self):
+        self.client.force_authenticate(user=self.mgr1)
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_non_owner_cannot_update_booking(self):
+        self.client.force_authenticate(user=self.mgr2)
+        response = self.client.patch(self.url, {"time_slot": "EVENING"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_non_owner_cannot_delete_booking(self):
+        self.client.force_authenticate(user=self.mgr2)
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
