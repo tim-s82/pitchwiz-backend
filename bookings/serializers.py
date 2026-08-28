@@ -51,24 +51,24 @@ class FixtureSerializer(serializers.ModelSerializer):
 
 
 class PitchBookingSerializer(serializers.ModelSerializer):
+    pitches = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+    # Make single pitch optional so multi-pitch ground maintenance requests can pass validation
+    pitch = serializers.PrimaryKeyRelatedField(
+        queryset=Pitch.objects.all(), required=False, allow_null=True
+    )
+
     class Meta:
         model = PitchBooking
         fields = [
-            "id",
-            "fixture",
-            "pitch",
-            "start_date",
-            "end_date",
-            "time_slot",
-            "requires_teas",
-            "requires_drinks",
-            "requested_by",
-            "external_contact_name",
-            "external_contact_email",
-            "status",
-            "notes",
-            "rejection_reason",
+            'id', 'fixture', 'pitch', 'pitches', 'booking_type',
+            'start_date', 'end_date', 'time_slot',
+            'requires_teas', 'requires_drinks', 'requested_by',
+            'external_contact_name', 'external_contact_email',
+            'status', 'rejection_reason', 'notes'
         ]
+        read_only_fields = ['status', 'rejection_reason', 'requested_by']
 
 
 class CateringRequestSerializer(serializers.ModelSerializer):

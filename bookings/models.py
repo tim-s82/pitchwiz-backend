@@ -75,11 +75,16 @@ class PitchBooking(models.Model):
         ("APPROVED", "Confirmed"),
         ("DENIED", "Denied"),
     ]
+    BOOKING_TYPES = [
+        ("FIXTURE", "Fixture"),
+        ("GROUND_MAINTENANCE", "Ground Maintenance"),
+    ]
 
     fixture = models.OneToOneField(
         Fixture, on_delete=models.CASCADE, null=True, blank=True
     )
     pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE)
+    booking_type = models.CharField(max_length=25, choices=BOOKING_TYPES, default="FIXTURE")
 
     start_date = models.DateField()
     end_date = models.DateField()
@@ -98,7 +103,9 @@ class PitchBooking(models.Model):
     rejection_reason = models.TextField(blank=True)
     notes = models.TextField(blank=True)
 
-    def __str__(self):
+def __str__(self):
+        if self.booking_type == "GROUND_MAINTENANCE":
+            return f"Maintenance: {self.pitch} on {self.start_date}"
         if self.start_date == self.end_date:
             return f"{self.pitch} on {self.start_date} ({self.get_time_slot_display()})"
         return f"{self.pitch} from {self.start_date} to {self.end_date}"

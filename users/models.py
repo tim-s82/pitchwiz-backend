@@ -11,6 +11,7 @@ class User(AbstractUser):
         FIXTURE_SECRETARY = "FIXTURE_SECRETARY", "Fixture Secretary"
         CATERER = "CATERER", "Caterer"
         EXTERNAL = "EXTERNAL", "External User"
+        GROUNDSTAFF = "GROUNDSTAFF", "Groundstaff"
 
     roles = models.JSONField(default=list, blank=True)
     last_password_change = models.DateTimeField(auto_now_add=True)
