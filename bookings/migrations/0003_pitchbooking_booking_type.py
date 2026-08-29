@@ -6,13 +6,20 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('bookings', '0002_initial'),
+        ("bookings", "0002_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='pitchbooking',
-            name='booking_type',
-            field=models.CharField(choices=[('FIXTURE', 'Fixture'), ('GROUND_MAINTENANCE', 'Ground Maintenance')], default='FIXTURE', max_length=25),
+            model_name="pitchbooking",
+            name="booking_type",
+            field=models.CharField(
+                choices=[
+                    ("FIXTURE", "Fixture"),
+                    ("GROUND_MAINTENANCE", "Ground Maintenance"),
+                ],
+                default="FIXTURE",
+                max_length=25,
+            ),
         ),
     ]
