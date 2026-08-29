@@ -127,3 +127,15 @@ class IsFixtureManagerOrReadOnly(BasePermission):
                 or User.Role.TEAM_MANAGER in request.user.roles
             )
         )
+
+
+class IsGroundstaff(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and (
+                User.Role.ADMIN in request.user.roles
+                or User.Role.GROUNDSTAFF in request.user.roles
+            )
+        )
