@@ -86,7 +86,7 @@ class PitchViewSet(viewsets.ModelViewSet):
 class TeamViewSet(viewsets.ModelViewSet):
     queryset = Team.objects.all()
     serializer_class = TeamSerializer
-    permission_classes = [IsAuthenticated, IsManagementTeam]
+    permission_classes = [IsAuthenticated, IsManagementOrGroundstaff]
 
 
 class FixtureViewSet(viewsets.ModelViewSet):

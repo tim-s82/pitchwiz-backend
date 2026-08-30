@@ -1,9 +1,7 @@
 Next steps for implementation:
 
-* Add groundstaff role which has view access to fixtures, and can block pitches or whole venues for ground maintenance
 * For Fixture Secretary - add a view of all bookings and their current status (pending, confirmed, rejected)
 * For Team Managers - add a view of their bookings and their status
-* Pitch management screen to have a filter for venue
 * General code refactor and tidy-up:
   * Make sure modals are all in separate files
   * Review look-and-feel across all screens and ensure consistency of buttons, inputs, tables, fonts, colours, etc
@@ -13,9 +11,7 @@ Next steps for implementation:
 * When multiple competing pending booking requests are present for the same slot, these should all be visible on the calendar view.
 * When multiple competing pending booking requests are present for the same slot, this should be highlighted in the secretary panel. When the fixture secretary approves a request which overlaps with another, a confirmation modal should be shown for confirmation, and the other overlapping request(s) should be auto-rejected.
 * Enhancements for mobile browser viewing -
-  * slide-out hamburger menu for navigation instead of top navbar
   * reduce cell padding on calendar view
 * Add pitch booking confirmation/rejection email notifications to fixture secretaries and team managers.
-* Hosting options for the app need to be investigated and a decision made and the app deployed.
 * Add play-cricket api integration to automatically pull fixtures. Only fixture secretary or admin can do this.
 * Add spreadsheet/csv import of fixtures - only fixture secretary or admin can do this.
