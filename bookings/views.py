@@ -1,3 +1,6 @@
+import io
+import csv
+from datetime import datetime
 from bookings import models
 from django.http import JsonResponse
 from django.db import transaction
@@ -8,6 +11,7 @@ from rest_framework.permissions import (
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
 )
+from rest_framework.decorators import api_view, permission_classes
 
 from users.permissions import (
     IsCaterer,
@@ -244,3 +248,107 @@ class BookingChangeRequestViewSet(viewsets.ModelViewSet):
         if self.request.method in ["POST", "PUT", "PATCH"]:
             return [IsFixtureSecretary()]
         return [IsAuthenticatedOrReadOnly()]
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def import_fixtures_view(request):
+    """
+    Expects a file upload (CSV) or JSON payload of rows.
+    Validates teams, derives time slots, checks database clashes (including pitch blocks),
+    and creates fixtures/bookings.
+    """
+    file_obj = request.FILES.get("file")
+    if not file_obj:
+        return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        decoded_file = file_obj.read().decode("utf-8")
+        io_string = io.StringIO(decoded_file)
+        reader = csv.DictReader(io_string)
+        
+        imported_count = 0
+        errors = []
+
+        for row_idx, row in enumerate(reader, start=1):
+            team_name = row.get("team", "").strip()
+            opponent = row.get("opponent", "").strip()
+            date_str = row.get("date", "").strip()
+            time_str = row.get("time", "14:00").strip()
+            pitch_pref = row.get("pitch_preference", "").strip()
+
+            # 1. Validate Team
+            team = Team.objects.filter(name__iexact=team_name).first()
+            if not team:
+                errors.append(f"Row {row_idx}: Team '{team_name}' not found.")
+                continue
+
+            # 2. Parse Date
+            try:
+                match_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                try:
+                    match_date = datetime.strptime(date_str, "%d/%m/%Y").date()
+                except ValueError:
+                    errors.append(f"Row {row_idx}: Invalid date format '{date_str}' (use YYYY-MM-DD).")
+                    continue
+
+            # 3. Derive Time Slot
+            try:
+                hour = int(time_str.split(":")[0])
+                if hour < 12:
+                    time_slot = "MORNING"
+                elif hour >= 17:
+                    time_slot = "EVENING"
+                else:
+                    time_slot = "AFTERNOON"
+            except (ValueError, IndexError):
+                time_slot = "AFTERNOON"
+
+            # 4. Find Pitch
+            pitch = Pitch.objects.filter(name__iexact=pitch_pref).first() or Pitch.objects.first()
+            if not pitch:
+                errors.append(f"Row {row_idx}: No valid pitch available.")
+                continue
+
+            # 5. Clash Detection (Checking existing bookings & blocked pitches)
+            conflicting_bookings = PitchBooking.objects.filter(
+                start_date=match_date,
+                time_slot__in=[time_slot, "ALL_DAY"],
+                status__in=["PENDING", "APPROVED"]
+            ).filter(
+                models.Q(pitch=pitch) | models.Q(pitch__in=pitch.blocks_pitches.all())
+            )
+
+            if conflicting_bookings.exists():
+                errors.append(f"Row {row_idx}: Pitch clash detected for {pitch.name} on {match_date} ({time_slot}).")
+                continue
+
+            # 6. Create Fixture and Booking
+            fixture = Fixture.objects.create(
+                team=team,
+                opponent=opponent,
+                start_date=match_date,
+                end_date=match_date
+            )
+
+            PitchBooking.objects.create(
+                fixture=fixture,
+                pitch=pitch,
+                start_date=match_date,
+                end_date=match_date,
+                time_slot=time_slot,
+                status="APPROVED",
+                notes=f"Imported via spreadsheet (Time: {time_str})",
+                requested_by=request.user
+            )
+            imported_count += 1
+
+        return Response({
+            "success": True,
+            "imported_count": imported_count,
+            "errors": errors
+        }, status=status.HTTP_200_ON_CLOSE if not errors else status.HTTP_207_MULTI_STATUS)
+
+    except Exception as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
