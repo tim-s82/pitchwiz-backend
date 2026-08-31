@@ -1,3 +1,4 @@
+from bookings.views import import_fixtures_view
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -32,4 +33,5 @@ router.register(
 urlpatterns = [
     path("", include(router.urls)),
     path("api/health/", health_check, name="health_check"),
+    path("api/fixtures/import/", import_fixtures_view, name="import-fixtures"),
 ]
