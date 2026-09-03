@@ -11,7 +11,7 @@ from rest_framework.permissions import (
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
 )
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 
 from users.permissions import (
     IsCaterer,
@@ -228,6 +228,37 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
             requested_by=user if user.is_authenticated else None,
             status="APPROVED" if is_auto_approved else "PENDING",
         )
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        permission_classes=[IsAuthenticated, IsFixtureSecretary],
+        url_path="update-status",
+    )
+    def update_status(self, request, pk=None):
+        """
+        Custom action for Fixture Secretaries to update the status and
+        rejection_reason of a PitchBooking. These fields are read-only in the
+        standard serializer to prevent team managers from self-approving.
+        """
+        booking = self.get_object()
+        new_status = request.data.get("status")
+        rejection_reason = request.data.get("rejection_reason", "")
+
+        allowed_statuses = ["APPROVED", "DENIED", "PENDING"]
+        if new_status not in allowed_statuses:
+            return Response(
+                {"status": [f"Must be one of: {', '.join(allowed_statuses)}"]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        booking.status = new_status
+        if rejection_reason:
+            booking.rejection_reason = rejection_reason
+        booking.save(update_fields=["status", "rejection_reason"])
+
+        serializer = self.get_serializer(booking)
+        return Response(serializer.data)
 
 
 class CateringRequestViewSet(viewsets.ModelViewSet):
