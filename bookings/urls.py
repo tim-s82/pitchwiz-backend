@@ -1,4 +1,4 @@
-from bookings.views import import_fixtures_view
+from bookings.views import import_fixtures_view, sync_play_cricket_fixtures_view
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -34,4 +34,9 @@ urlpatterns = [
     path("", include(router.urls)),
     path("api/health/", health_check, name="health_check"),
     path("api/fixtures/import/", import_fixtures_view, name="import-fixtures"),
+    path(
+        "api/fixtures/sync-play-cricket/",
+        sync_play_cricket_fixtures_view,
+        name="sync-play-cricket",
+    ),
 ]

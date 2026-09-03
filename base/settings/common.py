@@ -99,11 +99,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
 
 
@@ -132,3 +129,9 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+PLAY_CRICKET_SITE_ID = os.environ.get("PLAY_CRICKET_SITE_ID", "")
+PLAY_CRICKET_API_KEY = os.environ.get("PLAY_CRICKET_API_KEY", "")
+PLAY_CRICKET_URL = (
+    f"https://www.play-cricket.com/api/v2/sites/{PLAY_CRICKET_SITE_ID}/fixtures.json"
+)
