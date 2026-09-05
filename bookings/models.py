@@ -4,9 +4,16 @@ from django.db import models
 
 class Venue(models.Model):
     name = models.CharField(max_length=100)
+    is_default = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            # Unset default flag on all other venues
+            Venue.objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.name
+        return f"{self.name}{' (Default)' if self.is_default else ''}"
 
 
 class PitchLength(models.Model):

@@ -12,4 +12,3 @@ Next steps for implementation:
 * Venue to have "default" flag - when flag is set, this venue should be selected by default in the calendar view. Save method on venue model should ensure there is only one default venue, and should remove default flag from other venues if this one is set as default.
 * Add pitch booking confirmation/rejection email notifications to fixture secretaries and team managers.
 * Add play-cricket api integration to automatically pull fixtures. Only fixture secretary or admin can do this.
-* Add spreadsheet/csv import of fixtures - only fixture secretary or admin can do this.

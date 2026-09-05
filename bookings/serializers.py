@@ -15,7 +15,7 @@ from .models import (
 class VenueSerializer(serializers.ModelSerializer):
     class Meta:
         model = Venue
-        fields = ["id", "name"]
+        fields = ["id", "name", "is_default"]
 
 
 class PitchLengthSerializer(serializers.ModelSerializer):
