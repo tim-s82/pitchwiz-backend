@@ -14,7 +14,7 @@ from .views import (
     health_check,
 )
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"venues", VenueViewSet, basename="venue")
 router.register(r"pitches", PitchViewSet, basename="pitch")
 router.register(r"pitchlengths", PitchLengthViewSet, basename="pitchlength")
@@ -32,10 +32,10 @@ router.register(
 
 urlpatterns = [
     path("", include(router.urls)),
-    path("api/health/", health_check, name="health_check"),
-    path("api/fixtures/import/", import_fixtures_view, name="import-fixtures"),
+    path("api/health", health_check, name="health_check"),
+    path("api/fixtures/import", import_fixtures_view, name="import-fixtures"),
     path(
-        "api/fixtures/sync-play-cricket/",
+        "api/fixtures/sync-play-cricket",
         sync_play_cricket_fixtures_view,
         name="sync-play-cricket",
     ),
