@@ -8,6 +8,6 @@ router = DefaultRouter(trailing_slash=False)
 router.register(r"users", UserViewSet, basename="user")
 
 urlpatterns = [
-    path("", include(router.urls)),
     path("users/change-password", ChangePasswordView.as_view(), name="change-password"),
+    path("", include(router.urls)),
 ]
