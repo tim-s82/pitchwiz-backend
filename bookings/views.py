@@ -1,19 +1,19 @@
-import io
 import csv
-import requests
+import io
+import logging
 from datetime import datetime
 from bookings import models
-from django.http import JsonResponse
-from django.db import transaction
 from django.conf import settings
-from rest_framework import viewsets, status
-from rest_framework.response import Response
+from django.db import transaction
+from django.http import JsonResponse
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import (
     BasePermission,
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
 )
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.response import Response
 
 from users.permissions import (
     IsCaterer,
@@ -40,6 +40,8 @@ from .serializers import (
     TeamSerializer,
     VenueSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class BaseRolePermission(BasePermission):
@@ -139,6 +141,7 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         # 1. Ground Maintenance Multi-Pitch Flow
         if booking_type == "GROUND_MAINTENANCE" or pitches_list:
             if not pitches_list:
+                logger.warning(f"Maintenance booking attempt by user {request.user.id} failed: no pitches selected.")
                 return Response(
                     {
                         "pitches": [
@@ -169,6 +172,13 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                             time_slot__in=[time_slot, "ALL_DAY"]
                         )
 
+                    conflict_count = conflicts.count()
+                    if conflict_count > 0:
+                        logger.info(
+                            f"Ground maintenance override auto-denying {conflict_count} booking(s) "
+                            f"on pitch {pitch_obj.name} ({start_date} to {end_date}, slot: {time_slot})."
+                        )
+
                     conflicts.update(
                         status="DENIED",
                         rejection_reason="Cancelled automatically due to scheduled ground maintenance override.",
@@ -189,11 +199,16 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                     )
                     created_bookings.append(booking)
 
+            logger.info(
+                f"User {request.user.id} ({request.user.get_username()}) successfully created "
+                f"{len(created_bookings)} ground maintenance booking(s)."
+            )
             serializer = self.get_serializer(created_bookings, many=True)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         # 2. Standard Fixture Booking Flow
         if not data.get("pitch"):
+            logger.warning(f"Standard booking attempt by user {request.user.id} failed: missing pitch field.")
             return Response(
                 {"pitch": ["This field is required for standard bookings."]},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -206,6 +221,10 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                 main_booking_id = response.data.get("id")
                 main_pitch_id = int(data.get("pitch"))
                 pitch_obj = Pitch.objects.get(id=main_pitch_id)
+                logger.info(
+                    f"Standard pitch booking #{main_booking_id} created by user {request.user.id} "
+                    f"for pitch {pitch_obj.name}."
+                )
 
         return response
 
@@ -249,15 +268,25 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
 
         allowed_statuses = ["APPROVED", "DENIED", "PENDING"]
         if new_status not in allowed_statuses:
+            logger.warning(
+                f"Fixture secretary {request.user.id} attempted invalid status update "
+                f"for booking #{booking.id}: '{new_status}'"
+            )
             return Response(
                 {"status": [f"Must be one of: {', '.join(allowed_statuses)}"]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        old_status = booking.status
         booking.status = new_status
         if rejection_reason:
             booking.rejection_reason = rejection_reason
         booking.save(update_fields=["status", "rejection_reason"])
+
+        logger.info(
+            f"Booking #{booking.id} status changed from {old_status} to {new_status} "
+            f"by fixture secretary {request.user.id} ({request.user.get_username()})."
+        )
 
         serializer = self.get_serializer(booking)
         return Response(serializer.data)
@@ -293,9 +322,12 @@ def import_fixtures_view(request):
     """
     file_obj = request.FILES.get("file")
     if not file_obj:
+        logger.warning(f"Fixture import attempt by user {request.user.id} failed: no file uploaded.")
         return Response(
             {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
         )
+
+    logger.info(f"User {request.user.id} ({request.user.get_username()}) initiated fixture spreadsheet import.")
 
     try:
         decoded_file = file_obj.read().decode("utf-8")
@@ -383,14 +415,20 @@ def import_fixtures_view(request):
             )
             imported_count += 1
 
+        logger.info(
+            f"Fixture spreadsheet import completed by user {request.user.id}: "
+            f"{imported_count} imported, {len(errors)} error(s) encountered."
+        )
+
         return Response(
             {"success": True, "imported_count": imported_count, "errors": errors},
             status=(
-                status.HTTP_200_ON_CLOSE if not errors else status.HTTP_207_MULTI_STATUS
+                status.HTTP_200_OK if not errors else status.HTTP_207_MULTI_STATUS
             ),
         )
 
     except Exception as e:
+        logger.error(f"Fixture import failed with exception for user {request.user.id}: {str(e)}", exc_info=True)
         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -405,6 +443,7 @@ def sync_play_cricket_fixtures_view(request):
     api_token = getattr(settings, "PLAY_CRICKET_API_KEY", None)
 
     if not site_id or not api_token:
+        logger.warning("Play-Cricket sync attempted but Site ID or API Key is missing from settings.")
         return Response(
             {
                 "detail": "Play-Cricket Site ID or API Key is not configured on the server."
@@ -415,9 +454,12 @@ def sync_play_cricket_fixtures_view(request):
     season = request.data.get("season", datetime.now().year)
     params = {"api_token": api_token, "season": season}
 
+    logger.info(f"User {request.user.id} initiated Play-Cricket fixture sync for season {season}.")
+
     try:
         response = requests.get(settings.PLAY_CRICKET_URL, params=params, timeout=15)
         if response.status_code != 200:
+            logger.error(f"Play-Cricket API returned HTTP error code {response.status_code}.")
             return Response(
                 {"detail": f"Play-Cricket API error (HTTP {response.status_code})"},
                 status=status.HTTP_502_BAD_GATEWAY,
@@ -441,7 +483,6 @@ def sync_play_cricket_fixtures_view(request):
             ).strip()
 
             # Determine if our club is home or away, or identify opponent
-            # For simplicity, we match the team belonging to our club list
             team_obj = Team.objects.filter(name__iexact=home_team_name).first()
             opponent = away_team_name
             if not team_obj:
@@ -476,6 +517,11 @@ def sync_play_cricket_fixtures_view(request):
                 )
                 synced_count += 1
 
+        logger.info(
+            f"Play-Cricket sync complete: {synced_count} created, "
+            f"{updated_count} updated, {skipped_count} skipped, {len(errors)} error(s)."
+        )
+
         return Response(
             {
                 "success": True,
@@ -488,6 +534,7 @@ def sync_play_cricket_fixtures_view(request):
         )
 
     except requests.RequestException as req_err:
+        logger.error(f"Play-Cricket sync connection failure: {str(req_err)}", exc_info=True)
         return Response(
             {"detail": f"Failed to connect to Play-Cricket: {str(req_err)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

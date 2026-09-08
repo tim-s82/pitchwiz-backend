@@ -1,3 +1,4 @@
+import logging
 from rest_framework import serializers
 
 from .models import (
@@ -10,6 +11,8 @@ from .models import (
     Team,
     Venue,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class VenueSerializer(serializers.ModelSerializer):
@@ -90,6 +93,10 @@ class PitchBookingSerializer(serializers.ModelSerializer):
 
         # For standard bookings, ensure a single pitch is provided
         if not attrs.get("pitch"):
+            logger.warning(
+                f"PitchBooking validation failed: Standard booking missing 'pitch' field "
+                f"(booking_type: {booking_type})."
+            )
             raise serializers.ValidationError(
                 {"pitch": ["This field is required for standard bookings."]}
             )
