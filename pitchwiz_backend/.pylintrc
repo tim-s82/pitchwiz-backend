@@ -1,0 +1,36 @@
+[MASTER]
+# Load django plugin to eliminate false-positive 'no-member' errors on model managers (.objects)
+load-plugins=pylint_django
+
+[MESSAGES CONTROL]
+disable =
+    # Spurious documentation rules
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    
+    # Redundant with Black formatter
+    line-too-long,
+    
+    # Conflict with isort (let isort handle import sorting)
+    wrong-import-order,
+    
+    # Common Django/DRF patterns that trigger false warnings
+    too-few-public-methods,
+    too-many-ancestors,
+    too-many-locals,
+    too-many-statements,
+    
+    # Wildcard imports in settings files are standard Django practice
+    wildcard-import,
+    unused-wildcard-import
+
+[REPORTS]
+output-format = colorized
+
+[FORMAT]
+max-line-length = 100
+
+[TYPECHECK]
+# Additional safety for Django attributes
+generated-members = objects,DoesNotExist,MultipleObjectsReturned

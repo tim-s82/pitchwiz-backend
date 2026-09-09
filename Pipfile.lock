@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "8a16b84006db7c41f0f64fa29c5b5b171a661dc1a8f86ff52b52c1f1f72cea0b"
+            "sha256": "3b485a3cea1deb52116a9d287e07be337f0b55b52da628553c84f6a0f8bc53f4"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -239,12 +239,12 @@
         },
         "djangorestframework": {
             "hashes": [
-                "sha256:2323a5111837e0b784dcb8323abc78ecc54fa2a5af7aff2677cf50cdd849477f",
-                "sha256:381fc44d3249c9565c5f723850855b734e99030eb30957a49f506d3fe11d7dcb"
+                "sha256:605d79fa2ec2f02905492e5ea13d903c2d842d0b4c915a57f7bf02ab9f3c91dd",
+                "sha256:f1409d698967aaf82d5d98d76b549c8fba8bd92ebd0d83d24454508f72168dc2"
             ],
             "index": "pypi",
             "markers": "python_version >= '3.10'",
-            "version": "==3.18.0"
+            "version": "==3.18.1"
         },
         "djangorestframework-simplejwt": {
             "hashes": [
@@ -559,11 +559,11 @@
         },
         "platformdirs": {
             "hashes": [
-                "sha256:4f41487eeeeeb07f3a6625e61d9bc0ae6809f92d3386dbd74392fbb76108104d",
-                "sha256:8a02cb259042c79d1cd0450facc2fe6dc9d303ae7901afbe33bf8ea0b188cef6"
+                "sha256:52f2f181bbfde907966932cc8312d967d02976422d66d537ea16092b8e291081",
+                "sha256:f23abafea7dd4276d1f29104b83598d7dcc567cafd07c9c951e66665645437fc"
             ],
             "markers": "python_version >= '3.10'",
-            "version": "==4.11.7"
+            "version": "==4.11.8"
         },
         "pluggy": {
             "hashes": [
@@ -589,6 +589,23 @@
             "index": "pypi",
             "markers": "python_full_version >= '3.10.0'",
             "version": "==4.0.8"
+        },
+        "pylint-django": {
+            "hashes": [
+                "sha256:42accea9098e4a3298b4bfbae0e4da81f909f8bff0deda9485efbd6035a86d6a",
+                "sha256:706eb2cc8d7692236be9fd033a341042afe3bbbf99df9234a659db931016ef5d"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.9' and python_version < '4.0'",
+            "version": "==2.8.0"
+        },
+        "pylint-plugin-utils": {
+            "hashes": [
+                "sha256:16e9b84e5326ba893a319a0323fcc8b4bcc9c71fc654fcabba0605596c673818",
+                "sha256:5468d763878a18d5cc4db46eaffdda14313b043c962a263a7d78151b90132055"
+            ],
+            "markers": "python_version >= '3.9' and python_version < '4.0'",
+            "version": "==0.9.0"
         },
         "pytest": {
             "hashes": [
