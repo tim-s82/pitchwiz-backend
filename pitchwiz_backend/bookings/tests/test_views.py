@@ -59,8 +59,7 @@ class PitchBookingWorkflowTest(APITestCase):
         self.client.force_authenticate(user=self.secretary_user)
 
         csv_content = (
-            "team,opponent,date,time,pitch_preference\n" 
-            "1st XI,Test CC,2026-08-01,14:00,Pitch 1"
+            "team,opponent,date,time,pitch_preference\n" "1st XI,Test CC,2026-08-01,14:00,Pitch 1"
         )
         file_obj = BytesIO(csv_content.encode("utf-8"))
         file_obj.name = "fixtures.csv"
