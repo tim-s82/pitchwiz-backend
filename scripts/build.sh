@@ -27,7 +27,7 @@ echo "Running Pylint..."
 # pylint .
 
 echo "--- 5. Executing Unit Tests ---"
-pytest --settings=base.settings.unit_test
+DJANGO_SETTINGS_MODULE=base.settings.unit_test pytest
 
 echo "--- 6. Cleaning Dev Packages & Installing Production Requirements ---"
 # Uninstall development packages to keep the final runtime environment lean
