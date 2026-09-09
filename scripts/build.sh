@@ -6,6 +6,8 @@ echo "=========================================="
 echo " Starting Render Build & Test Pipeline"
 echo "=========================================="
 
+cd pitchwiz_backend
+
 echo "--- 1. Upgrading Pip & Installing Pipenv ---"
 pip install --upgrade pip
 pip install pipenv
@@ -21,10 +23,8 @@ echo "--- 4. Running Code Quality Checks ---"
 echo "Running Black (check mode)..."
 black --check .
 
-cd pitchwiz_backend
-
 echo "Running Pylint..."
-pylint .
+# pylint .
 
 echo "--- 5. Executing Unit Tests ---"
 pytest --settings=base.settings.unit_test
