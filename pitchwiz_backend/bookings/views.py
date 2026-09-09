@@ -2,9 +2,9 @@ import csv
 import io
 import logging
 from datetime import datetime
-from bookings import models
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -20,7 +20,7 @@ from users.permissions import (
     IsFixtureSecretary,
 )
 
-from .models import (
+from bookings.models import (
     BookingChangeRequest,
     CateringRequest,
     Fixture,
@@ -30,7 +30,7 @@ from .models import (
     Team,
     Venue,
 )
-from .serializers import (
+from bookings.serializers import (
     BookingChangeRequestSerializer,
     CateringRequestSerializer,
     FixtureSerializer,
@@ -141,7 +141,9 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         # 1. Ground Maintenance Multi-Pitch Flow
         if booking_type == "GROUND_MAINTENANCE" or pitches_list:
             if not pitches_list:
-                logger.warning(f"Maintenance booking attempt by user {request.user.id} failed: no pitches selected.")
+                logger.warning(
+                    f"Maintenance booking attempt by user {request.user.id} failed: no pitches selected."
+                )
                 return Response(
                     {
                         "pitches": [
@@ -208,7 +210,9 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
 
         # 2. Standard Fixture Booking Flow
         if not data.get("pitch"):
-            logger.warning(f"Standard booking attempt by user {request.user.id} failed: missing pitch field.")
+            logger.warning(
+                f"Standard booking attempt by user {request.user.id} failed: missing pitch field."
+            )
             return Response(
                 {"pitch": ["This field is required for standard bookings."]},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -322,12 +326,16 @@ def import_fixtures_view(request):
     """
     file_obj = request.FILES.get("file")
     if not file_obj:
-        logger.warning(f"Fixture import attempt by user {request.user.id} failed: no file uploaded.")
+        logger.warning(
+            f"Fixture import attempt by user {request.user.id} failed: no file uploaded."
+        )
         return Response(
             {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    logger.info(f"User {request.user.id} ({request.user.get_username()}) initiated fixture spreadsheet import.")
+    logger.info(
+        f"User {request.user.id} ({request.user.get_username()}) initiated fixture spreadsheet import."
+    )
 
     try:
         decoded_file = file_obj.read().decode("utf-8")
@@ -388,9 +396,7 @@ def import_fixtures_view(request):
                 start_date=match_date,
                 time_slot__in=[time_slot, "ALL_DAY"],
                 status__in=["PENDING", "APPROVED"],
-            ).filter(
-                models.Q(pitch=pitch) | models.Q(pitch__in=pitch.blocks_pitches.all())
-            )
+            ).filter(Q(pitch=pitch) | Q(pitch__in=pitch.blocks_pitches.all()))
 
             if conflicting_bookings.exists():
                 errors.append(
@@ -422,13 +428,14 @@ def import_fixtures_view(request):
 
         return Response(
             {"success": True, "imported_count": imported_count, "errors": errors},
-            status=(
-                status.HTTP_200_OK if not errors else status.HTTP_207_MULTI_STATUS
-            ),
+            status=(status.HTTP_200_OK if not errors else status.HTTP_207_MULTI_STATUS),
         )
 
     except Exception as e:
-        logger.error(f"Fixture import failed with exception for user {request.user.id}: {str(e)}", exc_info=True)
+        logger.error(
+            f"Fixture import failed with exception for user {request.user.id}: {str(e)}",
+            exc_info=True,
+        )
         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -443,7 +450,9 @@ def sync_play_cricket_fixtures_view(request):
     api_token = getattr(settings, "PLAY_CRICKET_API_KEY", None)
 
     if not site_id or not api_token:
-        logger.warning("Play-Cricket sync attempted but Site ID or API Key is missing from settings.")
+        logger.warning(
+            "Play-Cricket sync attempted but Site ID or API Key is missing from settings."
+        )
         return Response(
             {
                 "detail": "Play-Cricket Site ID or API Key is not configured on the server."
@@ -454,12 +463,16 @@ def sync_play_cricket_fixtures_view(request):
     season = request.data.get("season", datetime.now().year)
     params = {"api_token": api_token, "season": season}
 
-    logger.info(f"User {request.user.id} initiated Play-Cricket fixture sync for season {season}.")
+    logger.info(
+        f"User {request.user.id} initiated Play-Cricket fixture sync for season {season}."
+    )
 
     try:
         response = requests.get(settings.PLAY_CRICKET_URL, params=params, timeout=15)
         if response.status_code != 200:
-            logger.error(f"Play-Cricket API returned HTTP error code {response.status_code}.")
+            logger.error(
+                f"Play-Cricket API returned HTTP error code {response.status_code}."
+            )
             return Response(
                 {"detail": f"Play-Cricket API error (HTTP {response.status_code})"},
                 status=status.HTTP_502_BAD_GATEWAY,
@@ -534,7 +547,9 @@ def sync_play_cricket_fixtures_view(request):
         )
 
     except requests.RequestException as req_err:
-        logger.error(f"Play-Cricket sync connection failure: {str(req_err)}", exc_info=True)
+        logger.error(
+            f"Play-Cricket sync connection failure: {str(req_err)}", exc_info=True
+        )
         return Response(
             {"detail": f"Failed to connect to Play-Cricket: {str(req_err)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

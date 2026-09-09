@@ -31,7 +31,7 @@ class UserViewSet(viewsets.ModelViewSet):
         if request.method == "GET":
             serializer = UserSerializer(request.user)
             return Response(serializer.data)
-        
+
         elif request.method in ["PUT", "PATCH"]:
             # Only allow changing certain fields for 'me'
             serializer = UserSerializer(request.user, data=request.data, partial=True)
@@ -43,27 +43,34 @@ class UserViewSet(viewsets.ModelViewSet):
                         "to modify roles via the 'me' endpoint."
                     )
                     serializer.validated_data.pop("roles")
-                
+
                 serializer.save()
-                logger.info(f"User {request.user.id} ({request.user.get_username()}) updated their profile.")
+                logger.info(
+                    f"User {request.user.id} ({request.user.get_username()}) updated their profile."
+                )
                 return Response(serializer.data)
-            
+
             logger.warning(
                 f"Profile update validation failed for user {request.user.id}: {serializer.errors}"
             )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class ChangePasswordView(APIView):
-    permission_classes = [] # or IsAuthenticated if you handle auth globally/locally
+    permission_classes = []  # or IsAuthenticated if you handle auth globally/locally
 
     def post(self, request):
         if not request.user.is_authenticated:
-            logger.warning("Unauthenticated access attempt to 'change_password' endpoint.")
+            logger.warning(
+                "Unauthenticated access attempt to 'change_password' endpoint."
+            )
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
         serializer = ChangePasswordSerializer(data=request.data)
         if serializer.is_valid():
-            if not request.user.check_password(serializer.validated_data["old_password"]):
+            if not request.user.check_password(
+                serializer.validated_data["old_password"]
+            ):
                 logger.warning(
                     f"Failed password change attempt for user {request.user.id} "
                     f"({request.user.get_username()}): incorrect current password provided."
@@ -78,8 +85,12 @@ class ChangePasswordView(APIView):
             request.user.force_password_reset = False
             request.user.save()
 
-            logger.info(f"Password successfully changed for user {request.user.id} ({request.user.get_username()}).")
+            logger.info(
+                f"Password successfully changed for user {request.user.id} ({request.user.get_username()})."
+            )
             return Response({"status": "password set"}, status=status.HTTP_200_OK)
 
-        logger.warning(f"Password change validation failed for user {request.user.id}: {serializer.errors}")
+        logger.warning(
+            f"Password change validation failed for user {request.user.id}: {serializer.errors}"
+        )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

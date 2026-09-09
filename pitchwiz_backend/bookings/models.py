@@ -9,7 +9,9 @@ class Venue(models.Model):
     def save(self, *args, **kwargs):
         if self.is_default:
             # Unset default flag on all other venues
-            Venue.objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
+            Venue.objects.filter(is_default=True).exclude(pk=self.pk).update(
+                is_default=False
+            )
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -45,12 +47,7 @@ class Pitch(models.Model):
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        suffix = (
-            " (Outfield)"
-            if self.is_outfield
-            else f" ({self.get_pitch_category_display()})"
-        )
-        return f"{self.venue.name} - {self.name}{suffix}"
+        return f"{self.venue.name} - {self.name}"
 
 
 class Team(models.Model):
