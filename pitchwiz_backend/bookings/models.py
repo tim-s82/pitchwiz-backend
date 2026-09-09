@@ -4,9 +4,18 @@ from django.db import models
 
 class Venue(models.Model):
     name = models.CharField(max_length=100)
+    is_default = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            # Unset default flag on all other venues
+            Venue.objects.filter(is_default=True).exclude(pk=self.pk).update(
+                is_default=False
+            )
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.name
+        return f"{self.name}{' (Default)' if self.is_default else ''}"
 
 
 class PitchLength(models.Model):
@@ -38,12 +47,7 @@ class Pitch(models.Model):
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        suffix = (
-            " (Outfield)"
-            if self.is_outfield
-            else f" ({self.get_pitch_category_display()})"
-        )
-        return f"{self.venue.name} - {self.name}{suffix}"
+        return f"{self.venue.name} - {self.name}"
 
 
 class Team(models.Model):
