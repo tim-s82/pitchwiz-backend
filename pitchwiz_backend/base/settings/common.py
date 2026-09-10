@@ -132,6 +132,4 @@ SIMPLE_JWT = {
 
 PLAY_CRICKET_SITE_ID = os.environ.get("PLAY_CRICKET_SITE_ID", "")
 PLAY_CRICKET_API_KEY = os.environ.get("PLAY_CRICKET_API_KEY", "")
-PLAY_CRICKET_URL = (
-    f"https://www.play-cricket.com/api/v2/sites/{PLAY_CRICKET_SITE_ID}/fixtures.json"
-)
+PLAY_CRICKET_URL = f"https://www.play-cricket.com/api/v2/sites/{PLAY_CRICKET_SITE_ID}/fixtures.json"

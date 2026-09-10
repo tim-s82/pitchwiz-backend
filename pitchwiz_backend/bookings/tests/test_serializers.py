@@ -1,6 +1,4 @@
 from datetime import date
-from django.contrib.auth import get_user_model
-from django.test import TestCase
 
 from bookings.models import (
     BookingChangeRequest,
@@ -22,6 +20,8 @@ from bookings.serializers import (
     TeamSerializer,
     VenueSerializer,
 )
+from django.contrib.auth import get_user_model
+from django.test import TestCase
 
 User = get_user_model()
 
@@ -44,9 +44,7 @@ class VenueSerializerTest(TestCase):
 
 class PitchLengthSerializerTest(TestCase):
     def test_serialization(self):
-        length = PitchLength.objects.create(
-            length_yards=22, description="Senior Standard"
-        )
+        length = PitchLength.objects.create(length_yards=22, description="Senior Standard")
         serializer = PitchLengthSerializer(length)
         expected = {
             "id": length.id,
@@ -59,9 +57,7 @@ class PitchLengthSerializerTest(TestCase):
 class PitchSerializerTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Sports Complex")
-        self.pitch_length = PitchLength.objects.create(
-            length_yards=22, description="Full"
-        )
+        self.pitch_length = PitchLength.objects.create(length_yards=22, description="Full")
         self.pitch = Pitch.objects.create(
             venue=self.venue,
             name="Pitch 1",
@@ -82,9 +78,7 @@ class PitchSerializerTest(TestCase):
 
 class TeamSerializerTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="team_manager", password="password"
-        )
+        self.user = User.objects.create_user(username="team_manager", password="password")
         self.length = PitchLength.objects.create(length_yards=18, description="Junior")
         self.team = Team.objects.create(
             name="Under 15s", required_length=self.length, is_external=False
@@ -122,9 +116,7 @@ class FixtureSerializerTest(TestCase):
 class PitchBookingSerializerTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Home Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch A", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch A", pitch_type="GRASS")
         self.team = Team.objects.create(name="2nd XI")
         self.fixture = Fixture.objects.create(
             team=self.team,

@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
-
 from users.serializers import UserCreateSerializer, UserSerializer
 
 User = get_user_model()
@@ -87,6 +86,4 @@ class UserRoleValidationTests(TestCase):
         serializer = UserCreateSerializer(data=data)
         self.assertFalse(serializer.is_valid())
         self.assertIn("roles", serializer.errors)
-        self.assertEqual(
-            serializer.errors["roles"][0], "'GARBAGE' is not a valid role."
-        )
+        self.assertEqual(serializer.errors["roles"][0], "'GARBAGE' is not a valid role.")

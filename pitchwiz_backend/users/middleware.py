@@ -18,15 +18,11 @@ class PasswordExpiryMiddleware:
 
             # Check if password is older than 365 days
             if request.user.last_password_change:
-                days_since_change = (
-                    timezone.now() - request.user.last_password_change
-                ).days
+                days_since_change = (timezone.now() - request.user.last_password_change).days
                 if days_since_change >= 365:
                     return self._forbidden_response("PASSWORD_EXPIRED")
 
         return self.get_response(request)
 
     def _forbidden_response(self, code):
-        return JsonResponse(
-            {"detail": "Password reset required.", "code": code}, status=403
-        )
+        return JsonResponse({"detail": "Password reset required.", "code": code}, status=403)

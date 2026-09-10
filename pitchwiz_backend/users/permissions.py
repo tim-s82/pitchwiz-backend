@@ -7,9 +7,7 @@ User = get_user_model()
 class IsAdmin(BasePermission):
     def has_permission(self, request, view):
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and User.Role.ADMIN in request.user.roles
+            request.user and request.user.is_authenticated and User.Role.ADMIN in request.user.roles
         )
 
 
@@ -42,10 +40,7 @@ class IsCaterer(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and (
-                User.Role.ADMIN in request.user.roles
-                or User.Role.CATERER in request.user.roles
-            )
+            and (User.Role.ADMIN in request.user.roles or User.Role.CATERER in request.user.roles)
         )
 
 
@@ -135,7 +130,6 @@ class IsGroundstaff(BasePermission):
             request.user
             and request.user.is_authenticated
             and (
-                User.Role.ADMIN in request.user.roles
-                or User.Role.GROUNDSTAFF in request.user.roles
+                User.Role.ADMIN in request.user.roles or User.Role.GROUNDSTAFF in request.user.roles
             )
         )
