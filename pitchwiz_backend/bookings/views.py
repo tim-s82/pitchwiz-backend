@@ -378,7 +378,7 @@ def import_fixtures_view(request):
                     time_slot = "EVENING"
                 else:
                     time_slot = "AFTERNOON"
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 time_slot = "AFTERNOON"
 
             # 4. Find Pitch
