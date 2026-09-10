@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from users.permissions import IsUserManager
@@ -26,12 +27,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserCreateSerializer
         return UserSerializer
 
-    @action(detail=False, methods=["get", "put", "patch"], permission_classes=[])
+    @action(detail=False, methods=["get", "put", "patch"], permission_classes=[IsAuthenticated])
     def me(self, request):
-        if not request.user.is_authenticated:
-            logger.warning("Unauthenticated access attempt to 'me' endpoint.")
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
-
         if request.method == "GET":
             serializer = UserSerializer(request.user)
             return Response(serializer.data)
@@ -65,12 +62,9 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class ChangePasswordView(APIView):
-    permission_classes = []  # or IsAuthenticated if you handle auth globally/locally
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if not request.user.is_authenticated:
-            logger.warning("Unauthenticated access attempt to 'change_password' endpoint.")
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
         serializer = ChangePasswordSerializer(data=request.data)
         if serializer.is_valid():
