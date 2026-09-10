@@ -1,24 +1,8 @@
 import csv
 import io
 import logging
+import requests
 from datetime import datetime
-from django.conf import settings
-from django.db import transaction
-from django.db.models import Q
-from django.http import JsonResponse
-from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import (
-    BasePermission,
-    IsAuthenticated,
-    IsAuthenticatedOrReadOnly,
-)
-from rest_framework.response import Response
-
-from users.permissions import (
-    IsCaterer,
-    IsFixtureSecretary,
-)
 
 from bookings.models import (
     BookingChangeRequest,
@@ -40,6 +24,19 @@ from bookings.serializers import (
     TeamSerializer,
     VenueSerializer,
 )
+from django.conf import settings
+from django.db import transaction
+from django.db.models import Q
+from django.http import JsonResponse
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import (
+    BasePermission,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
+from rest_framework.response import Response
+from users.permissions import IsCaterer, IsFixtureSecretary
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +50,7 @@ class BaseRolePermission(BasePermission):
         if request.user.is_superuser:
             return True
         user_roles = (
-            request.user.roles.all()
-            if hasattr(request.user.roles, "all")
-            else request.user.roles
+            request.user.roles.all() if hasattr(request.user.roles, "all") else request.user.roles
         )
         role_names = [r.name if hasattr(r, "name") else str(r) for r in user_roles]
         return any(role in self.allowed_roles for role in role_names)
@@ -121,8 +116,7 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
             role_names = [r.name if hasattr(r, "name") else str(r) for r in user_roles]
 
             is_privileged = user.is_superuser or any(
-                role in ["ADMIN", "FIXTURE_SECRETARY", "GROUNDSTAFF"]
-                for role in role_names
+                role in ["ADMIN", "FIXTURE_SECRETARY", "GROUNDSTAFF"] for role in role_names
             )
             if is_privileged:
                 return [IsAuthenticated()]
@@ -142,14 +136,11 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         if booking_type == "GROUND_MAINTENANCE" or pitches_list:
             if not pitches_list:
                 logger.warning(
-                    f"Maintenance booking attempt by user {request.user.id} failed: no pitches selected."
+                    "Maintenance booking attempt by user %s failed: no pitches selected.",
+                    request.user.id,
                 )
                 return Response(
-                    {
-                        "pitches": [
-                            "At least one pitch must be selected for ground maintenance."
-                        ]
-                    },
+                    {"pitches": ["At least one pitch must be selected for ground maintenance."]},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -170,15 +161,17 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                         end_date__gte=start_date,
                     )
                     if time_slot != "ALL_DAY":
-                        conflicts = conflicts.filter(
-                            time_slot__in=[time_slot, "ALL_DAY"]
-                        )
+                        conflicts = conflicts.filter(time_slot__in=[time_slot, "ALL_DAY"])
 
                     conflict_count = conflicts.count()
                     if conflict_count > 0:
                         logger.info(
-                            f"Ground maintenance override auto-denying {conflict_count} booking(s) "
-                            f"on pitch {pitch_obj.name} ({start_date} to {end_date}, slot: {time_slot})."
+                            "Ground maintenance override auto-denying %s booking(s) on pitch %s (%s to %s, slot: %s).",
+                            conflict_count,
+                            pitch_obj.name,
+                            start_date,
+                            end_date,
+                            time_slot,
                         )
 
                     conflicts.update(
@@ -194,16 +187,16 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                         end_date=end_date,
                         time_slot=time_slot,
                         status="APPROVED",
-                        requested_by=(
-                            request.user if request.user.is_authenticated else None
-                        ),
+                        requested_by=(request.user if request.user.is_authenticated else None),
                         notes=data.get("notes", ""),
                     )
                     created_bookings.append(booking)
 
             logger.info(
-                f"User {request.user.id} ({request.user.get_username()}) successfully created "
-                f"{len(created_bookings)} ground maintenance booking(s)."
+                "User %s (%s) successfully created %s ground maintenance booking(s).",
+                request.user.id,
+                request.user.get_username(),
+                len(created_bookings),
             )
             serializer = self.get_serializer(created_bookings, many=True)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -211,7 +204,8 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         # 2. Standard Fixture Booking Flow
         if not data.get("pitch"):
             logger.warning(
-                f"Standard booking attempt by user {request.user.id} failed: missing pitch field."
+                "Standard booking attempt by user %s failed: missing pitch field.",
+                request.user.id,
             )
             return Response(
                 {"pitch": ["This field is required for standard bookings."]},
@@ -226,8 +220,10 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                 main_pitch_id = int(data.get("pitch"))
                 pitch_obj = Pitch.objects.get(id=main_pitch_id)
                 logger.info(
-                    f"Standard pitch booking #{main_booking_id} created by user {request.user.id} "
-                    f"for pitch {pitch_obj.name}."
+                    "Standard pitch booking #%s created by user %s for pitch %s.",
+                    main_booking_id,
+                    request.user.id,
+                    pitch_obj.name,
                 )
 
         return response
@@ -243,10 +239,7 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
 
         is_auto_approved = user.is_authenticated and (
             user.is_superuser
-            or any(
-                role in ["ADMIN", "FIXTURE_SECRETARY", "GROUNDSTAFF"]
-                for role in role_names
-            )
+            or any(role in ["ADMIN", "FIXTURE_SECRETARY", "GROUNDSTAFF"] for role in role_names)
         )
 
         serializer.save(
@@ -273,8 +266,10 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         allowed_statuses = ["APPROVED", "DENIED", "PENDING"]
         if new_status not in allowed_statuses:
             logger.warning(
-                f"Fixture secretary {request.user.id} attempted invalid status update "
-                f"for booking #{booking.id}: '{new_status}'"
+                "Fixture secretary %s attempted invalid status update for booking #%s: %s",
+                request.user.id,
+                booking.id,
+                new_status,
             )
             return Response(
                 {"status": [f"Must be one of: {', '.join(allowed_statuses)}"]},
@@ -288,8 +283,12 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         booking.save(update_fields=["status", "rejection_reason"])
 
         logger.info(
-            f"Booking #{booking.id} status changed from {old_status} to {new_status} "
-            f"by fixture secretary {request.user.id} ({request.user.get_username()})."
+            "Booking #%s status changed from %s to %s by fixture secretary %s (%s).",
+            booking.id,
+            old_status,
+            new_status,
+            request.user.id,
+            request.user.get_username(),
         )
 
         serializer = self.get_serializer(booking)
@@ -327,14 +326,14 @@ def import_fixtures_view(request):
     file_obj = request.FILES.get("file")
     if not file_obj:
         logger.warning(
-            f"Fixture import attempt by user {request.user.id} failed: no file uploaded."
+            "Fixture import attempt by user %s failed: no file uploaded.", request.user.id
         )
-        return Response(
-            {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
     logger.info(
-        f"User {request.user.id} ({request.user.get_username()}) initiated fixture spreadsheet import."
+        "User %s (%s) initiated fixture spreadsheet import.",
+        request.user.id,
+        request.user.get_username(),
     )
 
     try:
@@ -379,14 +378,11 @@ def import_fixtures_view(request):
                     time_slot = "EVENING"
                 else:
                     time_slot = "AFTERNOON"
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 time_slot = "AFTERNOON"
 
             # 4. Find Pitch
-            pitch = (
-                Pitch.objects.filter(name__iexact=pitch_pref).first()
-                or Pitch.objects.first()
-            )
+            pitch = Pitch.objects.filter(name__iexact=pitch_pref).first() or Pitch.objects.first()
             if not pitch:
                 errors.append(f"Row {row_idx}: No valid pitch available.")
                 continue
@@ -422,8 +418,10 @@ def import_fixtures_view(request):
             imported_count += 1
 
         logger.info(
-            f"Fixture spreadsheet import completed by user {request.user.id}: "
-            f"{imported_count} imported, {len(errors)} error(s) encountered."
+            "Fixture spreadsheet import completed by user %s: %s imported, %s error(s) encountered.",
+            request.user.id,
+            imported_count,
+            len(errors),
         )
 
         return Response(
@@ -433,7 +431,9 @@ def import_fixtures_view(request):
 
     except Exception as e:
         logger.error(
-            f"Fixture import failed with exception for user {request.user.id}: {str(e)}",
+            "Fixture import failed with exception for user %s: %s",
+            request.user.id,
+            str(e),
             exc_info=True,
         )
         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -454,9 +454,7 @@ def sync_play_cricket_fixtures_view(request):
             "Play-Cricket sync attempted but Site ID or API Key is missing from settings."
         )
         return Response(
-            {
-                "detail": "Play-Cricket Site ID or API Key is not configured on the server."
-            },
+            {"detail": "Play-Cricket Site ID or API Key is not configured on the server."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -464,15 +462,16 @@ def sync_play_cricket_fixtures_view(request):
     params = {"api_token": api_token, "season": season}
 
     logger.info(
-        f"User {request.user.id} initiated Play-Cricket fixture sync for season {season}."
+        "User %s (%s) initiated Play-Cricket fixture sync for season %s.",
+        request.user.id,
+        request.user.get_username(),
+        season,
     )
 
     try:
         response = requests.get(settings.PLAY_CRICKET_URL, params=params, timeout=15)
         if response.status_code != 200:
-            logger.error(
-                f"Play-Cricket API returned HTTP error code {response.status_code}."
-            )
+            logger.error("Play-Cricket API returned HTTP error code %s.", response.status_code)
             return Response(
                 {"detail": f"Play-Cricket API error (HTTP {response.status_code})"},
                 status=status.HTTP_502_BAD_GATEWAY,
@@ -491,9 +490,7 @@ def sync_play_cricket_fixtures_view(request):
             home_team_name = match.get("home_team_name", "").strip()
             away_team_name = match.get("away_team_name", "").strip()
             date_str = match.get("match_date", "").strip()
-            time_str = match.get(
-                "$time" if "$time" in match else "match_time", "14:00"
-            ).strip()
+            time_str = match.get("$time" if "$time" in match else "match_time", "14:00").strip()
 
             # Determine if our club is home or away, or identify opponent
             team_obj = Team.objects.filter(name__iexact=home_team_name).first()
@@ -531,8 +528,11 @@ def sync_play_cricket_fixtures_view(request):
                 synced_count += 1
 
         logger.info(
-            f"Play-Cricket sync complete: {synced_count} created, "
-            f"{updated_count} updated, {skipped_count} skipped, {len(errors)} error(s)."
+            "Play-Cricket sync complete: %s created, %s updated, %s skipped, %s error(s).",
+            synced_count,
+            updated_count,
+            skipped_count,
+            len(errors),
         )
 
         return Response(
@@ -547,9 +547,7 @@ def sync_play_cricket_fixtures_view(request):
         )
 
     except requests.RequestException as req_err:
-        logger.error(
-            f"Play-Cricket sync connection failure: {str(req_err)}", exc_info=True
-        )
+        logger.error("Play-Cricket sync connection failure: %s", str(req_err), exc_info=True)
         return Response(
             {"detail": f"Failed to connect to Play-Cricket: {str(req_err)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

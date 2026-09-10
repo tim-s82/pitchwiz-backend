@@ -1,8 +1,4 @@
-from bookings.views import import_fixtures_view, sync_play_cricket_fixtures_view
-from django.urls import include, path
-from rest_framework.routers import DefaultRouter
-
-from .views import (
+from bookings.views import (
     BookingChangeRequestViewSet,
     CateringRequestViewSet,
     FixtureViewSet,
@@ -12,7 +8,11 @@ from .views import (
     TeamViewSet,
     VenueViewSet,
     health_check,
+    import_fixtures_view,
+    sync_play_cricket_fixtures_view,
 )
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter(trailing_slash=False)
 router.register(r"venues", VenueViewSet, basename="venue")
@@ -21,9 +21,7 @@ router.register(r"pitchlengths", PitchLengthViewSet, basename="pitchlength")
 router.register(r"teams", TeamViewSet, basename="team")
 router.register(r"fixtures", FixtureViewSet, basename="fixture")
 router.register(r"pitchbookings", PitchBookingViewSet, basename="pitchbooking")
-router.register(
-    r"catering-requests", CateringRequestViewSet, basename="catering-request"
-)
+router.register(r"catering-requests", CateringRequestViewSet, basename="catering-request")
 router.register(
     r"booking-change-requests",
     BookingChangeRequestViewSet,

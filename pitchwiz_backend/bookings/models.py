@@ -9,9 +9,7 @@ class Venue(models.Model):
     def save(self, *args, **kwargs):
         if self.is_default:
             # Unset default flag on all other venues
-            Venue.objects.filter(is_default=True).exclude(pk=self.pk).update(
-                is_default=False
-            )
+            Venue.objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -69,9 +67,7 @@ class Fixture(models.Model):
     opponent = models.CharField(max_length=150)
     start_date = models.DateField()
     end_date = models.DateField()
-    play_cricket_id = models.CharField(
-        max_length=50, blank=True, null=True, unique=True
-    )
+    play_cricket_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
 
     def __str__(self):
         return f"{self.team.name} vs {self.opponent}"
@@ -94,14 +90,10 @@ class PitchBooking(models.Model):
         ("GROUND_MAINTENANCE", "Ground Maintenance"),
     ]
 
-    fixture = models.OneToOneField(
-        Fixture, on_delete=models.CASCADE, null=True, blank=True
-    )
+    fixture = models.OneToOneField(Fixture, on_delete=models.CASCADE, null=True, blank=True)
     # Allow null for multi-pitch ground maintenance bookings
     pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, null=True, blank=True)
-    booking_type = models.CharField(
-        max_length=25, choices=BOOKING_TYPES, default="FIXTURE"
-    )
+    booking_type = models.CharField(max_length=25, choices=BOOKING_TYPES, default="FIXTURE")
 
     start_date = models.DateField()
     end_date = models.DateField()
@@ -151,9 +143,7 @@ class BookingChangeRequest(models.Model):
         PitchBooking, on_delete=models.CASCADE, related_name="change_requests"
     )
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    new_pitch = models.ForeignKey(
-        Pitch, on_delete=models.CASCADE, null=True, blank=True
-    )
+    new_pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, null=True, blank=True)
     new_start_date = models.DateField(null=True, blank=True)
     new_end_date = models.DateField(null=True, blank=True)
     new_time_slot = models.CharField(

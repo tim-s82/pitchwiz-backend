@@ -1,8 +1,4 @@
 from datetime import date
-from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
-from django.db import IntegrityError
-from django.test import TestCase
 
 from bookings.models import (
     BookingChangeRequest,
@@ -14,6 +10,10 @@ from bookings.models import (
     Team,
     Venue,
 )
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
+from django.test import TestCase
 
 User = get_user_model()
 
@@ -50,9 +50,7 @@ class PitchLengthModelTest(TestCase):
 
     def test_length_yards_uniqueness(self):
         with self.assertRaises(IntegrityError):
-            PitchLength.objects.create(
-                length_yards=22, description="Duplicate Senior Pitch"
-            )
+            PitchLength.objects.create(length_yards=22, description="Duplicate Senior Pitch")
 
 
 class PitchModelTest(TestCase):
@@ -84,9 +82,7 @@ class PitchModelTest(TestCase):
 
 class TeamModelTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="manager1", password="password123"
-        )
+        self.user = User.objects.create_user(username="manager1", password="password123")
         self.length = PitchLength.objects.create(length_yards=20, description="Junior")
         self.team = Team.objects.create(
             name="1st XI", is_external=False, required_length=self.length
@@ -132,9 +128,7 @@ class FixtureModelTest(TestCase):
 class PitchBookingModelTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="1st XI")
         self.fixture = Fixture.objects.create(
             team=self.team,

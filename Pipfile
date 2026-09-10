@@ -20,6 +20,7 @@ black = "*"
 pylint = "*"
 pytest = "*"
 isort = "*"
+pylint-django = "*"
 
 [requires]
 python_version = "3.14"

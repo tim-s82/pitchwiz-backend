@@ -1,9 +1,5 @@
 from datetime import date
 from io import BytesIO
-from django.contrib.auth import get_user_model
-from django.urls import reverse
-from rest_framework import status
-from rest_framework.test import APITestCase
 
 from bookings.models import (
     BookingChangeRequest,
@@ -15,22 +11,22 @@ from bookings.models import (
     Team,
     Venue,
 )
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 User = get_user_model()
 
 
 class PitchBookingWorkflowTest(APITestCase):
     def setUp(self):
-        self.secretary_user = User.objects.create_user(
-            username="secretary", password="password"
-        )
+        self.secretary_user = User.objects.create_user(username="secretary", password="password")
         self.secretary_user.roles = ["FIXTURE_SECRETARY"]
         self.secretary_user.save()
 
         self.venue = Venue.objects.create(name="Main Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="1st XI")
         self.fixture = Fixture.objects.create(
             team=self.team,
@@ -63,8 +59,7 @@ class PitchBookingWorkflowTest(APITestCase):
         self.client.force_authenticate(user=self.secretary_user)
 
         csv_content = (
-            "team,opponent,date,time,pitch_preference\n"
-            "1st XI,Test CC,2026-08-01,14:00,Pitch 1"
+            "team,opponent,date,time,pitch_preference\n" "1st XI,Test CC,2026-08-01,14:00,Pitch 1"
         )
         file_obj = BytesIO(csv_content.encode("utf-8"))
         file_obj.name = "fixtures.csv"
