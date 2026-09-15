@@ -1,9 +1,9 @@
 import csv
 import io
 import logging
-import requests
 from datetime import datetime
 
+import requests
 from bookings.models import (
     BookingChangeRequest,
     CateringRequest,
@@ -37,6 +37,7 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 from users.permissions import IsCaterer, IsFixtureSecretary
+from bookings.matching import find_best_team_match, find_best_pitch_match
 
 logger = logging.getLogger(__name__)
 
@@ -317,237 +318,296 @@ class BookingChangeRequestViewSet(viewsets.ModelViewSet):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def import_fixtures_view(request):
+def commit_fixtures_import_view(request):
     """
-    Expects a file upload (CSV) or JSON payload of rows.
-    Validates teams, derives time slots, checks database clashes (including pitch blocks),
-    and creates fixtures/bookings.
+    Bulk commits a list of user-reviewed fixture rows (from spreadsheet or Play-Cricket).
+    Uses an atomic transaction to ensure data integrity.
     """
-    file_obj = request.FILES.get("file")
-    if not file_obj:
-        logger.warning(
-            "Fixture import attempt by user %s failed: no file uploaded.", request.user.id
-        )
-        return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
-
-    logger.info(
-        "User %s (%s) initiated fixture spreadsheet import.",
-        request.user.id,
-        request.user.get_username(),
-    )
-
-    try:
-        decoded_file = file_obj.read().decode("utf-8")
-        io_string = io.StringIO(decoded_file)
-        reader = csv.DictReader(io_string)
-
-        imported_count = 0
-        errors = []
-
-        for row_idx, row in enumerate(reader, start=1):
-            team_name = row.get("team", "").strip()
-            opponent = row.get("opponent", "").strip()
-            date_str = row.get("date", "").strip()
-            time_str = row.get("time", "14:00").strip()
-            pitch_pref = row.get("pitch_preference", "").strip()
-
-            # 1. Validate Team
-            team = Team.objects.filter(name__iexact=team_name).first()
-            if not team:
-                errors.append(f"Row {row_idx}: Team '{team_name}' not found.")
-                continue
-
-            # 2. Parse Date
-            try:
-                match_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-            except ValueError:
-                try:
-                    match_date = datetime.strptime(date_str, "%d/%m/%Y").date()
-                except ValueError:
-                    errors.append(
-                        f"Row {row_idx}: Invalid date format '{date_str}' (use YYYY-MM-DD)."
-                    )
-                    continue
-
-            # 3. Derive Time Slot
-            try:
-                hour = int(time_str.split(":")[0])
-                if hour < 12:
-                    time_slot = "MORNING"
-                elif hour >= 17:
-                    time_slot = "EVENING"
-                else:
-                    time_slot = "AFTERNOON"
-            except ValueError, IndexError:
-                time_slot = "AFTERNOON"
-
-            # 4. Find Pitch
-            pitch = Pitch.objects.filter(name__iexact=pitch_pref).first() or Pitch.objects.first()
-            if not pitch:
-                errors.append(f"Row {row_idx}: No valid pitch available.")
-                continue
-
-            # 5. Clash Detection (Checking existing bookings & blocked pitches)
-            conflicting_bookings = PitchBooking.objects.filter(
-                start_date=match_date,
-                time_slot__in=[time_slot, "ALL_DAY"],
-                status__in=["PENDING", "APPROVED"],
-            ).filter(Q(pitch=pitch) | Q(pitch__in=pitch.blocks_pitches.all()))
-
-            if conflicting_bookings.exists():
-                errors.append(
-                    f"Row {row_idx}: Pitch clash detected for {pitch.name} on {match_date} ({time_slot})."
-                )
-                continue
-
-            # 6. Create Fixture and Booking
-            fixture = Fixture.objects.create(
-                team=team, opponent=opponent, start_date=match_date, end_date=match_date
-            )
-
-            PitchBooking.objects.create(
-                fixture=fixture,
-                pitch=pitch,
-                start_date=match_date,
-                end_date=match_date,
-                time_slot=time_slot,
-                status="APPROVED",
-                notes=f"Imported via spreadsheet (Time: {time_str})",
-                requested_by=request.user,
-            )
-            imported_count += 1
-
-        logger.info(
-            "Fixture spreadsheet import completed by user %s: %s imported, %s error(s) encountered.",
-            request.user.id,
-            imported_count,
-            len(errors),
-        )
-
+    rows = request.data.get("rows", [])
+    if not rows:
         return Response(
-            {"success": True, "imported_count": imported_count, "errors": errors},
-            status=(status.HTTP_200_OK if not errors else status.HTTP_207_MULTI_STATUS),
+            {"detail": "No rows provided to commit."}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    except Exception as e:
-        logger.error(
-            "Fixture import failed with exception for user %s: %s",
-            request.user.id,
-            str(e),
-            exc_info=True,
-        )
-        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    synced_count = 0
+    updated_count = 0
+    errors = []
+
+    with transaction.atomic():
+        for idx, row in enumerate(rows):
+            team_id = row.get("teamId")
+            opponent = row.get("opponent")
+            date_str = row.get("date")
+            time_slot = row.get("timeSlot", "AFTERNOON")
+            pitch_id = row.get("pitchId")
+            pc_id = row.get("playCricketId")
+            time_str = row.get("time", "")
+
+            if not team_id or not opponent or not date_str:
+                errors.append(f"Row {idx+1}: Missing required fields.")
+                continue
+
+            team_obj = Team.objects.filter(id=team_id).first()
+            if not team_obj:
+                errors.append(f"Row {idx+1}: Invalid team assigned.")
+                continue
+
+            # Idempotency: Use Play-Cricket ID if available, otherwise match on team/opponent/date
+            if pc_id:
+                fixture, created = Fixture.objects.update_or_create(
+                    play_cricket_id=pc_id,
+                    defaults={
+                        "team": team_obj,
+                        "opponent": opponent,
+                        "start_date": date_str,
+                        "end_date": date_str,
+                    },
+                )
+            else:
+                fixture, created = Fixture.objects.get_or_create(
+                    team=team_obj,
+                    opponent=opponent,
+                    start_date=date_str,
+                    defaults={
+                        "end_date": date_str,
+                    },
+                )
+
+            if created:
+                synced_count += 1
+            else:
+                updated_count += 1
+
+            # Auto-approve Pitch Booking if a pitch was assigned
+            if pitch_id:
+                pitch_obj = Pitch.objects.filter(id=pitch_id).first()
+                if pitch_obj:
+                    PitchBooking.objects.update_or_create(
+                        fixture=fixture,
+                        defaults={
+                            "pitch": pitch_obj,
+                            "start_date": date_str,
+                            "end_date": date_str,
+                            "time_slot": time_slot,
+                            "status": "APPROVED",
+                            "requested_by": request.user,
+                            "notes": (
+                                f"Imported Fixture (Time: {time_str})"
+                                if time_str
+                                else "Imported Fixture"
+                            ),
+                        },
+                    )
+
+    return Response(
+        {
+            "success": True,
+            "synced_count": synced_count,
+            "updated_count": updated_count,
+            "errors": errors,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def sync_play_cricket_fixtures_view(request):
+def preview_spreadsheet_fixtures_view(request):
     """
-    Fetches upcoming fixtures from the ECB Play-Cricket v2 API,
-    checks for existing records by play_cricket_id, and returns a sync preview/result.
+    Accepts raw JSON rows from the uploaded spreadsheet, performs backend matching
+    for teams and pitches, validates fields, and returns processed rows for preview.
+    """
+    raw_rows = request.data.get("rows", [])
+    if not raw_rows:
+        return Response(
+            {"detail": "No rows provided for preview."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    teams = Team.objects.all()
+    pitches = Pitch.objects.all()
+    venues = Venue.objects.all()
+
+    processed_rows = []
+
+    for index, row in enumerate(raw_rows):
+        # Normalize incoming dict keys
+        norm_row = {k.strip().lower().replace(" ", "_"): v for k, v in row.items()}
+
+        team_name_raw = str(
+            norm_row.get("team") or norm_row.get("club_team") or norm_row.get("club") or ""
+        ).strip()
+        opponent = str(norm_row.get("opponent") or norm_row.get("opposition") or "").strip()
+        date_str = str(
+            norm_row.get("date") or norm_row.get("match_date") or norm_row.get("day") or ""
+        ).strip()
+        time_str = str(
+            norm_row.get("time")
+            or norm_row.get("start_time")
+            or norm_row.get("match_time")
+            or "14:00"
+        ).strip()
+        pitch_pref = str(
+            norm_row.get("pitch_preference") or norm_row.get("pitch") or norm_row.get("venue") or ""
+        ).strip()
+
+        # Run backend matching algorithms
+        team_match = find_best_team_match(team_name_raw, teams)
+        matched_pitch_id = find_best_pitch_match(pitch_pref, pitches, venues)
+
+        # Time slot derivation
+        hour = (
+            int(time_str.split(":")[0])
+            if ":" in time_str and time_str.split(":")[0].isdigit()
+            else 14
+        )
+        if hour < 12:
+            time_slot = "MORNING"
+        elif hour >= 17:
+            time_slot = "EVENING"
+        else:
+            time_slot = "AFTERNOON"
+
+        # Validation / Clash checks
+        clash_reason = None
+        if not team_name_raw:
+            clash_reason = "Missing team name"
+        elif not opponent:
+            clash_reason = "Missing opponent name"
+        elif not date_str:
+            clash_reason = "Missing match date"
+
+        processed_rows.append(
+            {
+                "id": index,
+                "teamNameRaw": team_name_raw,
+                "teamId": team_match["team_id"],
+                "teamAmbiguous": team_match["ambiguous"],
+                "opponent": opponent,
+                "date": date_str,
+                "time": time_str,
+                "timeSlot": time_slot,
+                "pitchPref": pitch_pref,
+                "pitchId": matched_pitch_id,
+                "clashReason": clash_reason,
+                "selected": not clash_reason,
+            }
+        )
+
+    return Response({"success": True, "rows": processed_rows}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def preview_play_cricket_fixtures_view(request):
+    """
+    Fetches raw fixtures from ECB Play-Cricket v2 API, runs backend team and ground matching,
+    and returns enriched rows for frontend review and adjustment.
     """
     site_id = getattr(settings, "PLAY_CRICKET_SITE_ID", None)
     api_token = getattr(settings, "PLAY_CRICKET_API_KEY", None)
+    base_url = getattr(settings, "PLAY_CRICKET_URL", "http://play-cricket.com")
 
     if not site_id or not api_token:
-        logger.warning(
-            "Play-Cricket sync attempted but Site ID or API Key is missing from settings."
-        )
         return Response(
             {"detail": "Play-Cricket Site ID or API Key is not configured on the server."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     season = request.data.get("season", datetime.now().year)
-    params = {"api_token": api_token, "season": season}
-
-    logger.info(
-        "User %s (%s) initiated Play-Cricket fixture sync for season %s.",
-        request.user.id,
-        request.user.get_username(),
-        season,
-    )
+    endpoint = f"{base_url.rstrip('/')}/api/v2/matches.json"
+    params = {"api_token": api_token, "site_id": site_id, "season": season}
 
     try:
-        response = requests.get(settings.PLAY_CRICKET_URL, params=params, timeout=15)
+        response = requests.get(endpoint, params=params, timeout=15)
         if response.status_code != 200:
-            logger.error("Play-Cricket API returned HTTP error code %s.", response.status_code)
             return Response(
                 {"detail": f"Play-Cricket API error (HTTP {response.status_code})"},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
         data = response.json()
-        raw_fixtures = data.get("fixtures", [])
+        raw_fixtures = data.get("matches", [])
 
-        synced_count = 0
-        updated_count = 0
-        skipped_count = 0
-        errors = []
+        teams = Team.objects.all()
+        pitches = Pitch.objects.all()
+        venues = Venue.objects.all()
 
-        for match in raw_fixtures:
+        processed_rows = []
+
+        for index, match in enumerate(raw_fixtures):
             pc_id = str(match.get("id"))
             home_team_name = match.get("home_team_name", "").strip()
             away_team_name = match.get("away_team_name", "").strip()
             date_str = match.get("match_date", "").strip()
-            time_str = match.get("$time" if "$time" in match else "match_time", "14:00").strip()
+            time_str = match.get("match_time", "14:00").strip()
+            ground_name = match.get("ground_name", "").strip()
+            ground_id = match.get("ground_id", "").strip()
 
-            # Determine if our club is home or away, or identify opponent
-            team_obj = Team.objects.filter(name__iexact=home_team_name).first()
+            # Determine home vs away / team matching
+            team_match = find_best_team_match(home_team_name, teams)
             opponent = away_team_name
-            if not team_obj:
-                team_obj = Team.objects.filter(name__iexact=away_team_name).first()
-                opponent = home_team_name
+            team_id = team_match["team_id"]
+            team_ambiguous = team_match["ambiguous"]
 
-            if not team_obj:
-                skipped_count += 1
-                continue
+            # If home team didn't match well, check away team
+            if not Team.objects.filter(id=team_id).exists() or (
+                home_team_name and not team_match["team_id"]
+            ):
+                away_team_match = find_best_team_match(away_team_name, teams)
+                if away_team_match["team_id"]:
+                    team_id = away_team_match["team_id"]
+                    team_ambiguous = away_team_match["ambiguous"]
+                    opponent = home_team_name
 
+            # Date parsing (DD/MM/YYYY)
             try:
-                match_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                parsed_date = datetime.strptime(date_str, "%d/%m/%Y").date().isoformat()
             except ValueError:
-                errors.append(f"Invalid date format for match ID {pc_id}: {date_str}")
-                continue
+                parsed_date = ""
 
-            # Idempotency check via play_cricket_id
-            existing_fixture = Fixture.objects.filter(play_cricket_id=pc_id).first()
-            if existing_fixture:
-                existing_fixture.opponent = opponent
-                existing_fixture.start_date = match_date
-                existing_fixture.end_date = match_date
-                existing_fixture.save()
-                updated_count += 1
+            # Match pitch/ground
+            matched_pitch_id = find_best_pitch_match(ground_name, pitches, venues)
+
+            # Time slot derivation
+            hour = (
+                int(time_str.split(":")[0])
+                if ":" in time_str and time_str.split(":")[0].isdigit()
+                else 14
+            )
+            if hour < 12:
+                time_slot = "MORNING"
+            elif hour >= 17:
+                time_slot = "EVENING"
             else:
-                Fixture.objects.create(
-                    team=team_obj,
-                    opponent=opponent,
-                    start_date=match_date,
-                    end_date=match_date,
-                    play_cricket_id=pc_id,
-                )
-                synced_count += 1
+                time_slot = "AFTERNOON"
 
-        logger.info(
-            "Play-Cricket sync complete: %s created, %s updated, %s skipped, %s error(s).",
-            synced_count,
-            updated_count,
-            skipped_count,
-            len(errors),
-        )
+            clash_reason = None
+            if not parsed_date:
+                clash_reason = f"Invalid date: {date_str}"
+            elif not team_id:
+                clash_reason = "Unmatched team"
 
-        return Response(
-            {
-                "success": True,
-                "synced_count": synced_count,
-                "updated_count": updated_count,
-                "skipped_count": skipped_count,
-                "errors": errors,
-            },
-            status=status.HTTP_200_OK,
-        )
+            processed_rows.append(
+                {
+                    "id": index,
+                    "playCricketId": pc_id,
+                    "teamNameRaw": home_team_name,
+                    "teamId": team_id,
+                    "teamAmbiguous": team_ambiguous,
+                    "opponent": opponent,
+                    "date": parsed_date,
+                    "time": time_str,
+                    "timeSlot": time_slot,
+                    "pitchPref": ground_name,
+                    "pitchId": matched_pitch_id,
+                    "clashReason": clash_reason,
+                    "selected": not clash_reason,
+                }
+            )
+
+        return Response({"success": True, "rows": processed_rows}, status=status.HTTP_200_OK)
 
     except requests.RequestException as req_err:
-        logger.error("Play-Cricket sync connection failure: %s", str(req_err), exc_info=True)
         return Response(
             {"detail": f"Failed to connect to Play-Cricket: {str(req_err)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -27,3 +27,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+PLAY_CRICKET_URL = "http://127.0.0.1:8001"
+PLAY_CRICKET_SITE_ID = "12345"
+PLAY_CRICKET_API_KEY = "mock-dev-token-xyz"
