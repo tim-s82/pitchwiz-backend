@@ -108,6 +108,12 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
     serializer_class = PitchBookingSerializer
 
     def get_permissions(self):
+        # The @action decorator's permission_classes kwarg is ignored when
+        # get_permissions() is overridden. Explicitly enforce secretary-only
+        # access for the update_status action here.
+        if self.action == "update_status":
+            return [IsAuthenticated(), IsFixtureSecretary()]
+
         if self.action in ["create", "destroy", "update", "partial_update"]:
             if not self.request.user or not self.request.user.is_authenticated:
                 return [IsAuthenticated()]
