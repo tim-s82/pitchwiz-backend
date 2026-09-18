@@ -7,9 +7,10 @@ from bookings.views import (
     PitchViewSet,
     TeamViewSet,
     VenueViewSet,
+    commit_fixtures_import_view,
     health_check,
-    import_fixtures_view,
-    sync_play_cricket_fixtures_view,
+    preview_play_cricket_fixtures_view,
+    preview_spreadsheet_fixtures_view,
 )
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
@@ -29,12 +30,17 @@ router.register(
 )
 
 urlpatterns = [
-    path("", include(router.urls)),
-    path("api/health", health_check, name="health_check"),
-    path("api/fixtures/import", import_fixtures_view, name="import-fixtures"),
+    path("health", health_check, name="health_check"),
     path(
-        "api/fixtures/sync-play-cricket",
-        sync_play_cricket_fixtures_view,
-        name="sync-play-cricket",
+        "fixtures/preview-spreadsheet",
+        preview_spreadsheet_fixtures_view,
+        name="preview-spreadsheet-fixtures",
     ),
+    path(
+        "fixtures/preview-play-cricket",
+        preview_play_cricket_fixtures_view,
+        name="preview-play-cricket-fixtures",
+    ),
+    path("fixtures/commit-import", commit_fixtures_import_view, name="commit-fixtures-import"),
+    path("", include(router.urls)),
 ]

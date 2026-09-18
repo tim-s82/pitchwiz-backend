@@ -21,6 +21,7 @@ pylint = "*"
 pytest = "*"
 isort = "*"
 pylint-django = "*"
+coverage = "*"
 
 [requires]
 python_version = "3.14"
