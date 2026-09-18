@@ -814,6 +814,7 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
     @patch("bookings.views.requests.get")
     def test_request_exception_returns_500(self, mock_get):
         import requests as req_lib
+
         mock_get.side_effect = req_lib.RequestException("Connection refused")
 
         with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):

@@ -23,7 +23,7 @@ MOCK_FIXTURES = {
             "match_date": "23/05/2026",
             "match_time": "14:00",
             # Away match, so ground shouldn't match Wimborne's local grounds
-            "ground_name": "Swanage Rec Ground", 
+            "ground_name": "Swanage Rec Ground",
             "ground_id": "102",
         },
         {

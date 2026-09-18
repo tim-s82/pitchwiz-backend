@@ -15,7 +15,6 @@ from bookings.matching import find_best_pitch_match, find_best_team_match, norma
 from bookings.models import Pitch, Venue
 from django.test import TestCase
 
-
 # ---------------------------------------------------------------------------
 # normalize_text
 # ---------------------------------------------------------------------------
@@ -163,8 +162,8 @@ class FindBestTeamMatchTest(TestCase):
         # Construct a scenario where scores differ by < 5
         # team_a: exact match → 100, team_b: full token subset → 81 (diff = 19, not ambiguous)
         # Instead force via same score using identical intersection counts
-        team_a = _make_team(40, "Park CC")   # intersect with "Park CC" → score 100
-        team_b = _make_team(41, "Park CC")   # same → score 100 too → ambiguous
+        team_a = _make_team(40, "Park CC")  # intersect with "Park CC" → score 100
+        team_b = _make_team(41, "Park CC")  # same → score 100 too → ambiguous
         result = find_best_team_match("Park CC", _make_teams_qs(team_a, team_b))
         self.assertTrue(result["ambiguous"])
 
@@ -276,7 +275,9 @@ class FindBestPitchMatchTest(TestCase):
     def test_no_match_returns_first_pitch(self):
         # Token "zzzzz" won't match anything → score stays 0 → best_pitch_id remains None
         # Function falls back to first pitch
-        result = find_best_pitch_match("zzzzz completely unmatched", self.pitches_qs, self.venues_qs)
+        result = find_best_pitch_match(
+            "zzzzz completely unmatched", self.pitches_qs, self.venues_qs
+        )
         # max_score will be -1 after the loop since no token matches
         # best_pitch_id = None, so fallback to first_pitch.id = 101
         self.assertEqual(result, 101)
