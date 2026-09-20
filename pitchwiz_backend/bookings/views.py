@@ -429,8 +429,9 @@ def preview_spreadsheet_fixtures_view(request):
             {"detail": "No rows provided for preview."}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    teams = Team.objects.all()
-    pitches = Pitch.objects.all()
+    teams = list(Team.objects.all())
+    # Prefetch supported lengths to prevent N+1 DB queries in the matching loop
+    pitches = Pitch.objects.prefetch_related("supported_lengths").all()
     venues = Venue.objects.all()
 
     processed_rows = []
@@ -458,7 +459,13 @@ def preview_spreadsheet_fixtures_view(request):
 
         # Run backend matching algorithms
         team_match = find_best_team_match(team_name_raw, teams)
-        matched_pitch_id = find_best_pitch_match(pitch_pref, pitches, venues)
+
+        # Find the actual team object to pass for pitch length validation
+        team_obj = next((t for t in teams if t.id == team_match["team_id"]), None)
+
+        matched_pitch_id = find_best_pitch_match(
+            pitch_pref, pitches, venues, team_id=team_match["team_id"], teams_qs=teams
+        )
 
         # Time slot derivation
         hour = (
@@ -507,11 +514,14 @@ def preview_spreadsheet_fixtures_view(request):
 def preview_play_cricket_fixtures_view(request):
     """
     Fetches raw fixtures from ECB Play-Cricket v2 API, runs backend team and ground matching,
-    and returns enriched rows for frontend review and adjustment.
+    filters for HOME fixtures only, and returns enriched rows for frontend review and adjustment.
     """
     site_id = getattr(settings, "PLAY_CRICKET_SITE_ID", None)
     api_token = getattr(settings, "PLAY_CRICKET_API_KEY", None)
     base_url = getattr(settings, "PLAY_CRICKET_URL", "http://play-cricket.com")
+
+    # Get the home club name setting to filter away fixtures
+    home_club_name = getattr(settings, "HOME_CLUB_NAME", "").lower()
 
     if not site_id or not api_token:
         return Response(
@@ -534,29 +544,35 @@ def preview_play_cricket_fixtures_view(request):
         data = response.json()
         raw_fixtures = data.get("matches", [])
 
-        teams = Team.objects.all()
-        pitches = Pitch.objects.all()
+        teams = list(Team.objects.all())  # Convert to list for efficient memory lookup
+        # Prefetch supported lengths to prevent N+1 DB queries in the matching loop
+        pitches = Pitch.objects.prefetch_related("supported_lengths").all()
         venues = Venue.objects.all()
 
         processed_rows = []
 
         for index, match in enumerate(raw_fixtures):
-            pc_id = str(match.get("id"))
             home_team_name = match.get("home_team_name", "").strip()
             away_team_name = match.get("away_team_name", "").strip()
+
+            # Skip away fixtures: Only process if our club is the home team
+            if home_club_name and home_club_name not in home_team_name.lower():
+                continue
+
+            pc_id = str(match.get("id"))
             date_str = match.get("match_date", "").strip()
             time_str = match.get("match_time", "14:00").strip()
             ground_name = match.get("ground_name", "").strip()
             ground_id = match.get("ground_id", "").strip()
 
-            # Determine home vs away / team matching
+            # Because we filtered for home games, our team is always the home team
             team_match = find_best_team_match(home_team_name, teams)
             opponent = away_team_name
             team_id = team_match["team_id"]
             team_ambiguous = team_match["ambiguous"]
 
-            # If home team didn't match well, check away team
-            if not Team.objects.filter(id=team_id).exists() or (
+            # If home team didn't match well, check away team ... (keep existing logic)
+            if not any(t.id == team_id for t in teams) or (
                 home_team_name and not team_match["team_id"]
             ):
                 away_team_match = find_best_team_match(away_team_name, teams)
@@ -565,14 +581,19 @@ def preview_play_cricket_fixtures_view(request):
                     team_ambiguous = away_team_match["ambiguous"]
                     opponent = home_team_name
 
+            # Find the actual team object to pass for pitch length validation
+            team_obj = next((t for t in teams if t.id == team_id), None)
+
             # Date parsing (DD/MM/YYYY)
             try:
                 parsed_date = datetime.strptime(date_str, "%d/%m/%Y").date().isoformat()
             except ValueError:
                 parsed_date = ""
 
-            # Match pitch/ground
-            matched_pitch_id = find_best_pitch_match(ground_name, pitches, venues)
+            # Match pitch/ground using the team's length requirement
+            matched_pitch_id = find_best_pitch_match(
+                ground_name, pitches, venues, team_id=team_id, teams_qs=teams
+            )
 
             # Time slot derivation
             hour = (
