@@ -763,7 +763,10 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
         }
         mock_get.return_value = mock_response
 
-        with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):
+        # Added HOME_CLUB_NAME="" to bypass away-fixture filtering
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
             response = self.client.post(self.url, {"season": 2026}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -792,7 +795,10 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
         }
         mock_get.return_value = mock_response
 
-        with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):
+        # Added HOME_CLUB_NAME="" to bypass away-fixture filtering
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
             response = self.client.post(self.url, {"season": 2026}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -806,7 +812,10 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
-        with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):
+        # Added HOME_CLUB_NAME="" to bypass away-fixture filtering
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
             response = self.client.post(self.url, {"season": 2026}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
@@ -817,7 +826,10 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
 
         mock_get.side_effect = req_lib.RequestException("Connection refused")
 
-        with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):
+        # Added HOME_CLUB_NAME="" to bypass away-fixture filtering
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
             response = self.client.post(self.url, {"season": 2026}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -842,7 +854,10 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
         }
         mock_get.return_value = mock_response
 
-        with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):
+        # Added HOME_CLUB_NAME="" to bypass away-fixture filtering
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
             response = self.client.post(self.url, {"season": 2026}, format="json")
 
         self.assertEqual(response.data["rows"][0]["timeSlot"], "MORNING")
@@ -866,7 +881,10 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
         }
         mock_get.return_value = mock_response
 
-        with self.settings(PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc"):
+        # Added HOME_CLUB_NAME="" to bypass away-fixture filtering
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
             response = self.client.post(self.url, {"season": 2026}, format="json")
 
         self.assertEqual(response.data["rows"][0]["timeSlot"], "EVENING")
