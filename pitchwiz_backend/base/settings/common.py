@@ -133,3 +133,4 @@ SIMPLE_JWT = {
 PLAY_CRICKET_SITE_ID = os.environ.get("PLAY_CRICKET_SITE_ID", "")
 PLAY_CRICKET_API_KEY = os.environ.get("PLAY_CRICKET_API_KEY", "")
 PLAY_CRICKET_URL = f"http://www.play-cricket.com"
+HOME_CLUB_NAME = "Wimborne"
