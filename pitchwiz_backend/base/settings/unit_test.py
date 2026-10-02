@@ -11,3 +11,7 @@ DATABASES = {
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",
 ]
+
+# --- Email (test) ---
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+EMAIL_ENABLED = False  # tests explicitly enable per test case as needed

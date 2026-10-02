@@ -1,0 +1,17 @@
+Pitch Booking Status Update
+============================
+
+Your pitch booking status has been updated.
+
+Booking:   {{ booking.pitch }}
+Date:      {{ booking.start_date }}{% if booking.end_date != booking.start_date %} to {{ booking.end_date }}{% endif %}
+
+Time Slot: {{ booking.get_time_slot_display }}
+
+Previous Status: {{ old_status }}
+New Status:      {{ booking.get_status_display }}
+{% if booking.rejection_reason %}
+Reason: {{ booking.rejection_reason }}
+{% endif %}
+
+Please log in to PitchWiz for more details.

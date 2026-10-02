@@ -23,3 +23,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
 ]
+
+# --- Email (local dev) ---
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_ENABLED = False   # opt-in locally; set EMAIL_ENABLED=True + EMAIL_OVERRIDE_ADDRESS to test

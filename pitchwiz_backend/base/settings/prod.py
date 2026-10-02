@@ -23,3 +23,13 @@ if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 CORS_ALLOWED_ORIGINS = ["https://pitchwiz-frontend.vercel.app"]
+
+# --- Email (Resend via django-anymail) ---
+ANYMAIL = {
+    "RESEND_API_KEY": os.environ.get("RESEND_API_KEY"),
+}
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", "pitchwiz.wimbornecc@onresend.com"
+)
+# EMAIL_ENABLED defaults True (from common.py env var); set EMAIL_ENABLED=False in Render to pause sending
