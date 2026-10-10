@@ -38,7 +38,8 @@ def _users_with_role(role_name):
     not supported on SQLite.
     """
     return [
-        u for u in User.objects.filter(is_active=True).only("id", "email", "roles")
+        u
+        for u in User.objects.filter(is_active=True).only("id", "email", "roles")
         if role_name in (u.roles or [])
     ]
 
@@ -50,11 +51,10 @@ def _secretaries():
 
 def _team_managers_for_team(team):
     """Return all active Team Managers linked to the given team."""
+    if not team:
+        return []
     team_manager_ids = set(team.managers.values_list("id", flat=True))
-    return [
-        u for u in _users_with_role("TEAM_MANAGER")
-        if u.id in team_manager_ids
-    ]
+    return [u for u in _users_with_role("TEAM_MANAGER") if u.id in team_manager_ids]
 
 
 def _caterers():
@@ -77,9 +77,7 @@ def notify_secretaries_new_booking(booking):
             fail_silently=False,
         )
     except Exception:
-        logger.exception(
-            "Failed to send new booking notification for booking #%s", booking.id
-        )
+        logger.exception("Failed to send new booking notification for booking #%s", booking.id)
 
 
 def notify_secretaries_external_request(booking):
@@ -97,14 +95,15 @@ def notify_secretaries_external_request(booking):
             fail_silently=False,
         )
     except Exception:
-        logger.exception(
-            "Failed to send external booking notification for booking #%s", booking.id
-        )
+        logger.exception("Failed to send external booking notification for booking #%s", booking.id)
 
 
 def notify_manager_booking_status_changed(booking, old_status):
     """Notify all managers of the relevant team when a booking is approved/denied."""
-    recipients = _resolve_recipients(_team_managers_for_team(booking.fixture.team))
+    team = getattr(getattr(booking, "fixture", None), "team", None)
+    if not team:
+        return
+    recipients = _resolve_recipients(_team_managers_for_team(team))
     if not recipients:
         return
     body = render_to_string(
@@ -120,14 +119,15 @@ def notify_manager_booking_status_changed(booking, old_status):
             fail_silently=False,
         )
     except Exception:
-        logger.exception(
-            "Failed to send status-change notification for booking #%s", booking.id
-        )
+        logger.exception("Failed to send status-change notification for booking #%s", booking.id)
 
 
 def notify_managers_booking_evicted(booking):
     """Notify team managers when their booking is auto-denied due to ground maintenance."""
-    recipients = _resolve_recipients(_team_managers_for_team(booking.fixture.team))
+    team = getattr(getattr(booking, "fixture", None), "team", None)
+    if not team:
+        return
+    recipients = _resolve_recipients(_team_managers_for_team(team))
     if not recipients:
         return
     body = render_to_string("bookings/email/eviction.txt", {"booking": booking})
@@ -140,9 +140,7 @@ def notify_managers_booking_evicted(booking):
             fail_silently=False,
         )
     except Exception:
-        logger.exception(
-            "Failed to send eviction notification for booking #%s", booking.id
-        )
+        logger.exception("Failed to send eviction notification for booking #%s", booking.id)
 
 
 def notify_caterers_new_catering_request(catering_request):

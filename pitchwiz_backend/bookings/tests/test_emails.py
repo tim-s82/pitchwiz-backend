@@ -51,27 +51,21 @@ EMAIL_SETTINGS = dict(
 
 
 def _make_secretary(username, email="secretary@example.com"):
-    user = User.objects.create_user(
-        username=username, email=email, password="Password1!"
-    )
+    user = User.objects.create_user(username=username, email=email, password="Password1!")
     user.roles = ["FIXTURE_SECRETARY"]
     user.save()
     return user
 
 
 def _make_manager(username, email="manager@example.com"):
-    user = User.objects.create_user(
-        username=username, email=email, password="Password1!"
-    )
+    user = User.objects.create_user(username=username, email=email, password="Password1!")
     user.roles = ["TEAM_MANAGER"]
     user.save()
     return user
 
 
 def _make_caterer(username, email="caterer@example.com"):
-    user = User.objects.create_user(
-        username=username, email=email, password="Password1!"
-    )
+    user = User.objects.create_user(username=username, email=email, password="Password1!")
     user.roles = ["CATERER"]
     user.save()
     return user
@@ -147,9 +141,7 @@ class ResolveRecipientsTest(TestCase):
 class NotifySecretariesNewBookingTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="1st XI")
 
     def test_sends_to_all_secretaries(self):
@@ -213,9 +205,7 @@ class NotifySecretariesNewBookingTest(TestCase):
 class NotifySecretariesExternalRequestTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="External Team", is_external=True)
 
     def test_sends_with_external_subject(self):
@@ -250,9 +240,7 @@ class NotifySecretariesExternalRequestTest(TestCase):
 class NotifyManagerStatusChangedTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="1st XI")
         self.other_team = Team.objects.create(name="2nd XI")
 
@@ -298,6 +286,17 @@ class NotifyManagerStatusChangedTest(TestCase):
         self.assertIn("mgr1@example.com", mail.outbox[0].to)
         self.assertIn("mgr2@example.com", mail.outbox[0].to)
 
+    def test_no_crash_when_booking_has_no_fixture(self):
+        booking = PitchBooking.objects.create(
+            pitch=self.pitch,
+            start_date=date(2026, 6, 15),
+            end_date=date(2026, 6, 15),
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+        notify_manager_booking_status_changed(booking, "PENDING")
+        self.assertEqual(len(mail.outbox), 0)
+
 
 # ---------------------------------------------------------------------------
 # notify_managers_booking_evicted
@@ -308,9 +307,7 @@ class NotifyManagerStatusChangedTest(TestCase):
 class NotifyManagersEvictedTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="1st XI")
 
     def test_sends_eviction_email(self):
@@ -326,6 +323,17 @@ class NotifyManagersEvictedTest(TestCase):
         notify_managers_booking_evicted(booking)
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_no_crash_when_booking_has_no_fixture(self):
+        booking = PitchBooking.objects.create(
+            pitch=self.pitch,
+            start_date=date(2026, 6, 15),
+            end_date=date(2026, 6, 15),
+            time_slot="AFTERNOON",
+            status="DENIED",
+        )
+        notify_managers_booking_evicted(booking)
+        self.assertEqual(len(mail.outbox), 0)
+
 
 # ---------------------------------------------------------------------------
 # notify_caterers_new_catering_request
@@ -336,9 +344,7 @@ class NotifyManagersEvictedTest(TestCase):
 class NotifyCaterersTest(TestCase):
     def setUp(self):
         self.venue = Venue.objects.create(name="Ground")
-        self.pitch = Pitch.objects.create(
-            venue=self.venue, name="Pitch 1", pitch_type="GRASS"
-        )
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
         self.team = Team.objects.create(name="1st XI")
         booking = _make_booking(self.team, self.pitch)
         self.catering_request = CateringRequest.objects.create(
