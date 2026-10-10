@@ -77,7 +77,7 @@ class IsManagementTeam(BaseRolePermission):
 class HealthCheckView(View):
     def get(self, request, *args, **kwargs):
         # Base response - anyone can hit this safely (no DB load)
-        response_data = {"app": "ok"}
+        response_data = {"status": "awake"}
 
         # Check for our secret token
         expected_token = os.environ.get("CRON_SECRET_TOKEN")
@@ -92,7 +92,7 @@ class HealthCheckView(View):
                 response_data["database"] = "awake"
             except Exception as e:
                 # If the DB fails, return a 503 so your monitoring flags it
-                return JsonResponse({"app": "ok", "database": "error"}, status=503)
+                return JsonResponse({"status": "awake", "database": "error"}, status=503)
 
         return JsonResponse(response_data)
 
