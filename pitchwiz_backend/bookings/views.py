@@ -38,6 +38,13 @@ from rest_framework.permissions import (
 from rest_framework.response import Response
 from users.permissions import IsCaterer, IsFixtureSecretary
 from bookings.matching import find_best_team_match, find_best_pitch_match
+from bookings.emails import (
+    notify_secretaries_new_booking,
+    notify_secretaries_external_request,
+    notify_manager_booking_status_changed,
+    notify_managers_booking_evicted,
+    notify_caterers_new_catering_request,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +188,11 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                             time_slot,
                         )
 
+                    # Collect before bulk update so we can notify each evicted booking
+                    evicted_bookings = list(conflicts)
+                    for evicted in evicted_bookings:
+                        notify_managers_booking_evicted(evicted)
+
                     conflicts.update(
                         status="DENIED",
                         rejection_reason="Cancelled automatically due to scheduled ground maintenance override.",
@@ -253,6 +265,12 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
             requested_by=user if user.is_authenticated else None,
             status="APPROVED" if is_auto_approved else "PENDING",
         )
+        instance = serializer.instance
+        if instance.status == "PENDING":
+            if instance.external_contact_name:
+                notify_secretaries_external_request(instance)
+            else:
+                notify_secretaries_new_booking(instance)
 
     @action(
         detail=True,
@@ -298,6 +316,8 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
             request.user.get_username(),
         )
 
+        notify_manager_booking_status_changed(booking, old_status)
+
         serializer = self.get_serializer(booking)
         return Response(serializer.data)
 
@@ -310,6 +330,10 @@ class CateringRequestViewSet(viewsets.ModelViewSet):
         if self.request.method in ["POST", "PUT", "PATCH"]:
             return [IsCaterer()]
         return [IsAuthenticatedOrReadOnly()]
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        notify_caterers_new_catering_request(instance)
 
 
 class BookingChangeRequestViewSet(viewsets.ModelViewSet):

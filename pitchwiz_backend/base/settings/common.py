@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
+    "anymail",
     "users",
     "bookings",
 ]
@@ -134,3 +135,12 @@ PLAY_CRICKET_SITE_ID = os.environ.get("PLAY_CRICKET_SITE_ID", "")
 PLAY_CRICKET_API_KEY = os.environ.get("PLAY_CRICKET_API_KEY", "")
 PLAY_CRICKET_URL = f"http://www.play-cricket.com"
 HOME_CLUB_NAME = "Wimborne"
+
+# --- Email settings ---
+EMAIL_SUBJECT_PREFIX = "[PitchWiz] "
+
+# Master on/off switch — override per environment
+EMAIL_ENABLED = os.environ.get("EMAIL_ENABLED", "True") == "True"
+
+# If set, all outgoing mail is redirected here (for QA/staging)
+EMAIL_OVERRIDE_ADDRESS = os.environ.get("EMAIL_OVERRIDE_ADDRESS", "")

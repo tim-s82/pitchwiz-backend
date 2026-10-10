@@ -1,0 +1,12 @@
+Pitch Booking Cancelled — Ground Maintenance
+=============================================
+
+We're sorry to inform you that your pitch booking has been automatically
+cancelled due to scheduled ground maintenance.
+
+Booking:   {{ booking.pitch }}
+Date:      {{ booking.start_date }}{% if booking.end_date != booking.start_date %} to {{ booking.end_date }}{% endif %}
+
+Time Slot: {{ booking.get_time_slot_display }}
+
+Please contact the Fixture Secretary if you need to rearrange this booking.
