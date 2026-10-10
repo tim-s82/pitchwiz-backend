@@ -78,11 +78,11 @@ class HealthCheckView(View):
     def get(self, request, *args, **kwargs):
         # Base response - anyone can hit this safely (no DB load)
         response_data = {"app": "ok"}
-        
+
         # Check for our secret token
         expected_token = os.environ.get("CRON_SECRET_TOKEN")
         provided_token = request.headers.get("X-Cron-Token")
-        
+
         # Only ping the database if the token matches
         if expected_token and provided_token == expected_token:
             try:
@@ -93,7 +93,7 @@ class HealthCheckView(View):
             except Exception as e:
                 # If the DB fails, return a 503 so your monitoring flags it
                 return JsonResponse({"app": "ok", "database": "error"}, status=503)
-                
+
         return JsonResponse(response_data)
 
 
