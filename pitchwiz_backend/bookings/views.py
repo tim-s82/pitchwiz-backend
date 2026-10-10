@@ -1,5 +1,6 @@
 import csv
 import io
+import os
 import logging
 from datetime import datetime
 
@@ -25,9 +26,10 @@ from bookings.serializers import (
     VenueSerializer,
 )
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, connection
 from django.db.models import Q
 from django.http import JsonResponse
+from django.views import View
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import (
@@ -72,8 +74,27 @@ class IsManagementTeam(BaseRolePermission):
     allowed_roles = ["ADMIN", "TEAM_MANAGER", "FIXTURE_SECRETARY"]
 
 
-def health_check(request):
-    return JsonResponse({"status": "awake"})
+class HealthCheckView(View):
+    def get(self, request, *args, **kwargs):
+        # Base response - anyone can hit this safely (no DB load)
+        response_data = {"app": "ok"}
+        
+        # Check for our secret token
+        expected_token = os.environ.get("CRON_SECRET_TOKEN")
+        provided_token = request.headers.get("X-Cron-Token")
+        
+        # Only ping the database if the token matches
+        if expected_token and provided_token == expected_token:
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                response_data["database"] = "awake"
+            except Exception as e:
+                # If the DB fails, return a 503 so your monitoring flags it
+                return JsonResponse({"app": "ok", "database": "error"}, status=503)
+                
+        return JsonResponse(response_data)
 
 
 class VenueViewSet(viewsets.ModelViewSet):

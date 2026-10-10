@@ -7,8 +7,8 @@ from bookings.views import (
     PitchViewSet,
     TeamViewSet,
     VenueViewSet,
+    HealthCheckView,
     commit_fixtures_import_view,
-    health_check,
     preview_play_cricket_fixtures_view,
     preview_spreadsheet_fixtures_view,
 )
@@ -30,7 +30,7 @@ router.register(
 )
 
 urlpatterns = [
-    path("health", health_check, name="health_check"),
+    path("health", HealthCheckView.as_view(), name="health_check"),
     path(
         "fixtures/preview-spreadsheet",
         preview_spreadsheet_fixtures_view,
