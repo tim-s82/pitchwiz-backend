@@ -31,3 +31,11 @@ CORS_ALLOWED_ORIGINS = [
 PLAY_CRICKET_URL = "http://127.0.0.1:8001"
 PLAY_CRICKET_SITE_ID = "12345"
 PLAY_CRICKET_API_KEY = "mock-dev-token-xyz"
+
+# --- Email (Resend via django-anymail) ---
+ANYMAIL = {
+    "RESEND_API_KEY": os.environ.get("RESEND_API_KEY"),
+}
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "pitchwiz-dev.wimbornecc@onresend.com")
+# EMAIL_ENABLED defaults True (from common.py env var); set EMAIL_ENABLED=False in Render to pause sending

@@ -1,0 +1,18 @@
+New Pitch Booking Request
+=========================
+
+A new pitch booking has been submitted and requires your review.
+
+{% if booking.external_contact_name %}
+EXTERNAL REQUEST
+Submitted by: {{ booking.external_contact_name }} ({{ booking.external_contact_email }})
+{% else %}
+Requested by: {{ booking.requested_by.get_full_name }} ({{ booking.requested_by.email }})
+{% endif %}
+
+Pitch:     {{ booking.pitch }}
+Date:      {{ booking.start_date }}{% if booking.end_date != booking.start_date %} to {{ booking.end_date }}{% endif %}
+
+Time Slot: {{ booking.get_time_slot_display }}
+
+Please log in to PitchWiz to review this request.

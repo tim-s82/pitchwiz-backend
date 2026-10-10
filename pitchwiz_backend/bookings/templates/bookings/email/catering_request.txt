@@ -1,0 +1,15 @@
+New Catering Request
+=====================
+
+A new catering request has been submitted.
+
+Fixture:       {{ catering_request.booking.fixture }}
+Pitch:         {{ catering_request.booking.pitch }}
+Date:          {{ catering_request.booking.start_date }}{% if catering_request.booking.end_date != catering_request.booking.start_date %} to {{ catering_request.booking.end_date }}{% endif %}
+
+Time Slot:     {{ catering_request.booking.get_time_slot_display }}
+
+Requires Teas:   {{ catering_request.requires_teas|yesno:"Yes,No" }}
+Requires Drinks: {{ catering_request.requires_drinks|yesno:"Yes,No" }}
+
+Please log in to PitchWiz to review the catering requirements.
