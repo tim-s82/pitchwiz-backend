@@ -82,7 +82,6 @@ class HealthCheckView(View):
         # Check for our secret token
         expected_token = os.environ.get("CRON_SECRET_TOKEN")
         provided_token = request.headers.get("X-Cron-Token")
-        logger.info(f"Health check: {provided_token} vs {expected_token}")
 
         # Only ping the database if the token matches
         if expected_token and provided_token == expected_token:
