@@ -82,6 +82,56 @@ class HealthCheckTest(APITestCase):
 
 
 # ---------------------------------------------------------------------------
+# version
+# ---------------------------------------------------------------------------
+
+
+class VersionViewTest(APITestCase):
+    def test_returns_200_and_build_info(self):
+        url = reverse("version")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("service"), "pitchwiz-backend")
+        self.assertIn("version", data)
+        self.assertIn("build_date", data)
+
+    def test_trailing_slash_returns_200(self):
+        url = reverse("version_slash")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_unauthenticated_can_access(self):
+        self.client.logout()
+        url = reverse("version")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    @patch.dict(
+        "os.environ",
+        {
+            "BACKEND_VERSION": "2.5.0",
+            "BUILD_DATE": "2026-11-01",
+            "RENDER_GIT_COMMIT": "abcdef123456",
+        },
+    )
+    def test_env_var_overrides(self):
+        from base.version import get_build_info
+
+        get_build_info.cache_clear()
+        try:
+            url = reverse("version")
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["version"], "2.5.0")
+            self.assertEqual(data["build_date"], "2026-11-01")
+            self.assertEqual(data["commit"], "abcdef1")
+        finally:
+            get_build_info.cache_clear()
+
+
+# ---------------------------------------------------------------------------
 # Role-based permission tests for management ViewSets
 # ---------------------------------------------------------------------------
 

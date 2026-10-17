@@ -1,10 +1,18 @@
 import csv
 import io
-import os
 import logging
+import os
 from datetime import datetime
 
 import requests
+from bookings.emails import (
+    notify_caterers_new_catering_request,
+    notify_manager_booking_status_changed,
+    notify_managers_booking_evicted,
+    notify_secretaries_external_request,
+    notify_secretaries_new_booking,
+)
+from bookings.matching import find_best_pitch_match, find_best_team_match
 from bookings.models import (
     BookingChangeRequest,
     CateringRequest,
@@ -26,7 +34,7 @@ from bookings.serializers import (
     VenueSerializer,
 )
 from django.conf import settings
-from django.db import transaction, connection
+from django.db import connection, transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.views import View
@@ -39,14 +47,6 @@ from rest_framework.permissions import (
 )
 from rest_framework.response import Response
 from users.permissions import IsCaterer, IsFixtureSecretary
-from bookings.matching import find_best_team_match, find_best_pitch_match
-from bookings.emails import (
-    notify_secretaries_new_booking,
-    notify_secretaries_external_request,
-    notify_manager_booking_status_changed,
-    notify_managers_booking_evicted,
-    notify_caterers_new_catering_request,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,9 @@ class IsManagementTeam(BaseRolePermission):
     allowed_roles = ["ADMIN", "TEAM_MANAGER", "FIXTURE_SECRETARY"]
 
 
+from base.version import get_build_info
+
+
 class HealthCheckView(View):
     def get(self, request, *args, **kwargs):
         # Base response - anyone can hit this safely (no DB load)
@@ -95,6 +98,11 @@ class HealthCheckView(View):
                 return JsonResponse({"status": "awake", "database": "error"}, status=503)
 
         return JsonResponse(response_data)
+
+
+class VersionView(View):
+    def get(self, request, *args, **kwargs):
+        return JsonResponse(get_build_info())
 
 
 class VenueViewSet(viewsets.ModelViewSet):
