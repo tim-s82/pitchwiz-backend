@@ -2,12 +2,13 @@ from bookings.views import (
     BookingChangeRequestViewSet,
     CateringRequestViewSet,
     FixtureViewSet,
+    HealthCheckView,
     PitchBookingViewSet,
     PitchLengthViewSet,
     PitchViewSet,
     TeamViewSet,
     VenueViewSet,
-    HealthCheckView,
+    VersionView,
     commit_fixtures_import_view,
     preview_play_cricket_fixtures_view,
     preview_spreadsheet_fixtures_view,
@@ -31,6 +32,8 @@ router.register(
 
 urlpatterns = [
     path("health", HealthCheckView.as_view(), name="health_check"),
+    path("version", VersionView.as_view(), name="version"),
+    path("version/", VersionView.as_view(), name="version_slash"),
     path(
         "fixtures/preview-spreadsheet",
         preview_spreadsheet_fixtures_view,
