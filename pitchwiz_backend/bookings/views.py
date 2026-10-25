@@ -249,6 +249,52 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(created_bookings, many=True)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        # 1b. Training Session Flow
+        if booking_type == "TRAINING":
+            if not data.get("pitch"):
+                return Response(
+                    {"pitch": ["This field is required for training bookings."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Server-side: team manager may only book teams they manage
+            user = request.user
+            user_roles = user.roles.all() if hasattr(user.roles, "all") else user.roles
+            role_names = [r.name if hasattr(r, "name") else str(r) for r in user_roles]
+            is_privileged = user.is_superuser or any(
+                role in ["ADMIN", "FIXTURE_SECRETARY"] for role in role_names
+            )
+            if not is_privileged:
+                raw_teams = data.get("teams") or []
+                team_ids = [int(tid) for tid in raw_teams]
+                if not team_ids:
+                    return Response(
+                        {"teams": ["You can only book training for teams you manage."]},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                managed_ids = set(Team.objects.filter(managers=user).values_list("id", flat=True))
+                for tid in team_ids:
+                    if tid not in managed_ids:
+                        logger.warning(
+                            "User %s attempted to book training for unmanaged team %s.",
+                            user.id,
+                            tid,
+                        )
+                        return Response(
+                            {"teams": ["You can only book training for teams you manage."]},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+
+            with transaction.atomic():
+                response = super().create(request, *args, **kwargs)
+                if response.status_code == status.HTTP_201_CREATED:
+                    logger.info(
+                        "Training session booking #%s created by user %s (teams: %s).",
+                        response.data["id"],
+                        user.id,
+                        data.get("teams", []) or "club-wide",
+                    )
+            return response
+
         # 2. Standard Fixture Booking Flow
         if not data.get("pitch"):
             logger.warning(
