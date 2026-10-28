@@ -1,6 +1,6 @@
 # Training Session Booking — Implementation Progress Log
 
-This log tracks the step-by-step implementation of the Training Session Booking feature according to `training_session_plan.md`.
+This log tracks the step-by-step implementation of the Training Session Booking feature according to `training_session_plan.md` and subsequent refinement items.
 
 ## Phase 1: Backend Implementation
 
@@ -47,10 +47,26 @@ This log tracks the step-by-step implementation of the Training Session Booking 
 - [x] **10. `CellContent.jsx`**
   - [x] Add `Dumbbell` badge and cyan/sky visual styling for training bookings
 - [x] **11. Frontend Testing & Verification**
-  - [x] Added `src/tests/trainingBookings.test.js` covering training status labelling and permissions
+  - [x] Added `src/tests/trainingBookings.test.jsx` covering training status labelling, permissions, and `allowedTeams`
   - [x] Ran `npm run lint` (0 errors, 0 warnings)
-  - [x] Ran `npm run test` (all 11 tests pass)
+  - [x] Ran `npm run test` (all 13 tests pass)
   - [x] Ran `npm run build` (production build succeeds)
 
+## Phase 3: Defect Fixes & Polish
+
+- [x] **12. Team Scoping for Team Managers (`useCalendarState.js`)**
+  - [x] Fixed `allowedTeams` logic so only `ADMIN` and `FIXTURE_SECRETARY` can access all teams; removed `USER_MANAGER` from `hasAdminOrSec` which was incorrectly granting full team access to team managers holding the user manager role.
+  - [x] Used robust string comparison `String(m) === String(currentUser.id)` to safely match manager IDs regardless of numeric/string representation.
+- [x] **13. "Invited Teams" Label Subtitle Removed (`BookingCreateModal.jsx`)**
+  - [x] Removed `(leave empty for club-wide)` text from the `Invited Teams` label, since the dedicated "Club-wide" pill handles club-wide selection for Admins/Secretaries, and club-wide is not permitted for team managers.
+- [x] **14. Form Validation for Team Managers (`CalendarView.jsx`)**
+  - [x] Added client-side validation in `handleFormSubmit` ensuring non-privileged users must select at least one team when requesting a training session before submission.
+- [x] **15. Secretary Dashboard Training Booking Rendering (`SecretaryDashboard.jsx`)**
+  - [x] Added `Dumbbell` import from `lucide-react`.
+  - [x] Fixed booking label derivation in the Pending tab: training bookings now show "Training — {team names}" or "Training — Club-wide" instead of incorrectly falling through to the "External (Dorset/Public)" fallback.
+  - [x] Fixed booking type badge: training bookings now show a cyan "Training Session" badge with `Dumbbell` icon instead of the pink "External Booking" badge.
+  - [x] Applied same label fix to the Booking History (resolved) tab.
+  - [x] Verified: `npm run lint` (0 errors), `npm test` (13/13 pass).
+
 ---
-*Status: Complete. All plan items successfully implemented and verified.*
+*Status: Complete. All defect fixes implemented, verified, and test suites passing.*
