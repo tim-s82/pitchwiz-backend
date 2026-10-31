@@ -146,6 +146,10 @@ class VenueViewSetPermissionTest(APITestCase):
         response = self.client.post(self.url, self.payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_unauthenticated_can_list(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
     def test_external_user_cannot_create(self):
         user = _make_user("external", roles=["EXTERNAL"])
         self.client.force_authenticate(user=user)
@@ -187,6 +191,10 @@ class PitchViewSetPermissionTest(APITestCase):
         response = self.client.post(self.url, self.payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_unauthenticated_can_list(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
     def test_external_user_cannot_create(self):
         user = _make_user("ext", roles=["EXTERNAL"])
         self.client.force_authenticate(user=user)
@@ -219,6 +227,10 @@ class FixtureViewSetPermissionTest(APITestCase):
     def test_unauthenticated_cannot_create(self):
         response = self.client.post(self.url, self.payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_can_list(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_authenticated_user_can_list(self):
         user = _make_user("reader", roles=["TEAM_MANAGER"])
@@ -284,6 +296,44 @@ class PitchBookingStandardTest(APITestCase):
             "fixture": self.fixture.id,
             "start_date": "2026-07-20",
             "end_date": "2026-07-20",
+        }
+        response = self.client.post(self.url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_can_create_external_booking(self):
+        payload = {
+            "booking_type": "FIXTURE",
+            "pitch": self.pitch.id,
+            "start_date": "2026-08-10",
+            "end_date": "2026-08-10",
+            "time_slot": "ALL_DAY",
+            "external_contact_name": "Dorset Cricket Board",
+            "external_contact_email": "fixtures@dorsetcricket.org",
+            "notes": "County youth tournament",
+        }
+        response = self.client.post(self.url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        booking = PitchBooking.objects.get(external_contact_name="Dorset Cricket Board")
+        self.assertEqual(booking.status, "PENDING")
+        self.assertIsNone(booking.requested_by)
+        self.assertEqual(booking.external_contact_email, "fixtures@dorsetcricket.org")
+
+    def test_unauthenticated_cannot_create_ground_maintenance(self):
+        payload = {
+            "booking_type": "GROUND_MAINTENANCE",
+            "pitches": [self.pitch.id],
+            "start_date": "2026-07-25",
+            "end_date": "2026-07-25",
+        }
+        response = self.client.post(self.url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_cannot_create_training(self):
+        payload = {
+            "booking_type": "TRAINING",
+            "pitch": self.pitch.id,
+            "start_date": "2026-07-25",
+            "end_date": "2026-07-25",
         }
         response = self.client.post(self.url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -647,6 +697,10 @@ class BookingChangeRequestViewSetPermissionTest(APITestCase):
     def test_unauthenticated_cannot_create(self):
         response = self.client.post(self.url, self.payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_can_list(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_authenticated_can_list(self):
         user = _make_user("reader", roles=["TEAM_MANAGER"])
