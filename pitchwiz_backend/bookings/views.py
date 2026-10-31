@@ -41,6 +41,7 @@ from django.views import View
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import (
+    AllowAny,
     BasePermission,
     IsAuthenticated,
     IsAuthenticatedOrReadOnly,
@@ -108,7 +109,11 @@ class VersionView(View):
 class VenueViewSet(viewsets.ModelViewSet):
     queryset = Venue.objects.all()
     serializer_class = VenueSerializer
-    permission_classes = [IsAuthenticated, IsManagementOrGroundstaff]
+
+    def get_permissions(self):
+        if self.action in ["create", "destroy", "update", "partial_update"]:
+            return [IsAuthenticated(), IsManagementOrGroundstaff()]
+        return [AllowAny()]
 
 
 class PitchLengthViewSet(viewsets.ModelViewSet):
@@ -120,7 +125,11 @@ class PitchLengthViewSet(viewsets.ModelViewSet):
 class PitchViewSet(viewsets.ModelViewSet):
     queryset = Pitch.objects.all()
     serializer_class = PitchSerializer
-    permission_classes = [IsAuthenticated, IsManagementOrGroundstaff]
+
+    def get_permissions(self):
+        if self.action in ["create", "destroy", "update", "partial_update"]:
+            return [IsAuthenticated(), IsManagementOrGroundstaff()]
+        return [AllowAny()]
 
 
 class TeamViewSet(viewsets.ModelViewSet):
@@ -150,7 +159,7 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
         if self.action == "update_status":
             return [IsAuthenticated(), IsFixtureSecretary()]
 
-        if self.action in ["create", "destroy", "update", "partial_update"]:
+        if self.action in ["destroy", "update", "partial_update"]:
             if not self.request.user or not self.request.user.is_authenticated:
                 return [IsAuthenticated()]
 
@@ -168,6 +177,9 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
 
                 return [IsAuthenticated(), IsBookingOwnerOrSecretary()]
 
+        if self.action == "create":
+            return [AllowAny()]
+
         return [IsAuthenticatedOrReadOnly()]
 
     def create(self, request, *args, **kwargs):
@@ -177,6 +189,11 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
 
         # 1. Ground Maintenance Multi-Pitch Flow
         if booking_type == "GROUND_MAINTENANCE" or pitches_list:
+            if not request.user or not request.user.is_authenticated:
+                return Response(
+                    {"detail": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
             if not pitches_list:
                 logger.warning(
                     "Maintenance booking attempt by user %s failed: no pitches selected.",
@@ -249,11 +266,73 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(created_bookings, many=True)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        # 1b. Training Session Flow
+        if booking_type == "TRAINING":
+            if not request.user or not request.user.is_authenticated:
+                return Response(
+                    {"detail": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            if not data.get("pitch"):
+                return Response(
+                    {"pitch": ["This field is required for training bookings."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Server-side: team manager may only book teams they manage
+            user = request.user
+            user_roles = user.roles.all() if hasattr(user.roles, "all") else user.roles
+            role_names = [r.name if hasattr(r, "name") else str(r) for r in user_roles]
+            is_privileged = user.is_superuser or any(
+                role in ["ADMIN", "FIXTURE_SECRETARY"] for role in role_names
+            )
+            if not is_privileged:
+                raw_teams = data.get("teams") or []
+                team_ids = [int(tid) for tid in raw_teams]
+                if not team_ids:
+                    return Response(
+                        {"teams": ["You can only book training for teams you manage."]},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                managed_ids = set(Team.objects.filter(managers=user).values_list("id", flat=True))
+                for tid in team_ids:
+                    if tid not in managed_ids:
+                        logger.warning(
+                            "User %s attempted to book training for unmanaged team %s.",
+                            user.id,
+                            tid,
+                        )
+                        return Response(
+                            {"teams": ["You can only book training for teams you manage."]},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+
+            with transaction.atomic():
+                response = super().create(request, *args, **kwargs)
+                if response.status_code == status.HTTP_201_CREATED:
+                    logger.info(
+                        "Training session booking #%s created by user %s (teams: %s).",
+                        response.data["id"],
+                        user.id,
+                        data.get("teams", []) or "club-wide",
+                    )
+            return response
+
         # 2. Standard Fixture Booking Flow
+        if not request.user or not request.user.is_authenticated:
+            if (
+                not data.get("external_contact_name")
+                or not data.get("external_contact_email")
+                or data.get("fixture")
+            ):
+                return Response(
+                    {"detail": "Authentication credentials were not provided."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
         if not data.get("pitch"):
             logger.warning(
                 "Standard booking attempt by user %s failed: missing pitch field.",
-                request.user.id,
+                request.user.id if request.user.is_authenticated else "anonymous",
             )
             return Response(
                 {"pitch": ["This field is required for standard bookings."]},
@@ -270,7 +349,7 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
                 logger.info(
                     "Standard pitch booking #%s created by user %s for pitch %s.",
                     main_booking_id,
-                    request.user.id,
+                    request.user.id if request.user.is_authenticated else "anonymous",
                     pitch_obj.name,
                 )
 
@@ -278,11 +357,10 @@ class PitchBookingViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        user_roles = (
-            user.roles.all()
-            if hasattr(user.roles, "all")
-            else (user.roles if user.is_authenticated else [])
-        )
+        if user and user.is_authenticated:
+            user_roles = user.roles.all() if hasattr(user.roles, "all") else user.roles
+        else:
+            user_roles = []
         role_names = [r.name if hasattr(r, "name") else str(r) for r in user_roles]
 
         is_auto_approved = user.is_authenticated and (

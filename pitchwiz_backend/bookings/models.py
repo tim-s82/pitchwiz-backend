@@ -88,11 +88,18 @@ class PitchBooking(models.Model):
     BOOKING_TYPES = [
         ("FIXTURE", "Fixture"),
         ("GROUND_MAINTENANCE", "Ground Maintenance"),
+        ("TRAINING", "Training Session"),
     ]
 
     fixture = models.OneToOneField(Fixture, on_delete=models.CASCADE, null=True, blank=True)
     # Allow null for multi-pitch ground maintenance bookings
     pitch = models.ForeignKey(Pitch, on_delete=models.CASCADE, null=True, blank=True)
+    teams = models.ManyToManyField(
+        Team,
+        related_name="training_bookings",
+        blank=True,
+        help_text="Teams invited to this training session. Empty = club-wide.",
+    )
     booking_type = models.CharField(max_length=25, choices=BOOKING_TYPES, default="FIXTURE")
 
     start_date = models.DateField()
@@ -115,6 +122,9 @@ class PitchBooking(models.Model):
     def __str__(self):
         if self.booking_type == "GROUND_MAINTENANCE":
             return f"Maintenance: {self.pitch} on {self.start_date}"
+        if self.booking_type == "TRAINING":
+            team_names = ", ".join(t.name for t in self.teams.all()) or "Club-wide"
+            return f"Training ({team_names}): {self.pitch} on {self.start_date}"
         if self.start_date == self.end_date:
             return f"{self.pitch} on {self.start_date} ({self.get_time_slot_display()})"
         return f"{self.pitch} from {self.start_date} to {self.end_date}"

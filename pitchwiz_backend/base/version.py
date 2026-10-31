@@ -6,8 +6,8 @@ import functools
 import os
 import subprocess
 
-VERSION = "1.0.1"
-DEFAULT_BUILD_DATE = "2026-10-17"
+VERSION = "1.1.0"
+DEFAULT_BUILD_DATE = "2026-10-28"
 
 
 @functools.lru_cache(maxsize=1)
