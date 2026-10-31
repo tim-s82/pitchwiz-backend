@@ -61,6 +61,12 @@ class PitchBookingSerializer(serializers.ModelSerializer):
     pitch = serializers.PrimaryKeyRelatedField(
         queryset=Pitch.objects.all(), required=False, allow_null=True
     )
+    teams = serializers.PrimaryKeyRelatedField(
+        queryset=Team.objects.all(),
+        many=True,
+        required=False,
+        default=list,
+    )
 
     class Meta:
         model = PitchBooking
@@ -69,6 +75,7 @@ class PitchBookingSerializer(serializers.ModelSerializer):
             "fixture",
             "pitch",
             "pitches",
+            "teams",
             "booking_type",
             "start_date",
             "end_date",
@@ -91,6 +98,18 @@ class PitchBookingSerializer(serializers.ModelSerializer):
         if booking_type == "GROUND_MAINTENANCE":
             return attrs
 
+        if booking_type == "TRAINING":
+            # Reject if a fixture FK was also provided
+            if attrs.get("fixture"):
+                raise serializers.ValidationError(
+                    {"fixture": ["Training bookings cannot be linked to a fixture."]}
+                )
+            if not attrs.get("pitch"):
+                raise serializers.ValidationError(
+                    {"pitch": ["This field is required for training bookings."]}
+                )
+            return attrs
+
         # For standard bookings, ensure a single pitch is provided
         if not attrs.get("pitch"):
             logger.warning(
@@ -103,6 +122,18 @@ class PitchBookingSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+    def create(self, validated_data):
+        teams = validated_data.pop("teams", [])
+        instance = super().create(validated_data)
+        instance.teams.set(teams)
+        return instance
+
+    def update(self, instance, validated_data):
+        if "teams" in validated_data:
+            teams = validated_data.pop("teams")
+            instance.teams.set(teams)
+        return super().update(instance, validated_data)
 
 
 class CateringRequestSerializer(serializers.ModelSerializer):
