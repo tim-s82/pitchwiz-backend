@@ -11,8 +11,17 @@ Covers:
 
 from unittest.mock import MagicMock, patch
 
-from bookings.matching import find_best_pitch_match, find_best_team_match, normalize_text
-from bookings.models import Pitch, Venue
+from bookings.matching import (
+    allocate_pitches_for_matches,
+    find_best_pitch_match,
+    find_best_team_match,
+    find_best_venue_match,
+    infer_season_year,
+    match_fixtures_for_refresh,
+    normalize_opponent,
+    normalize_text,
+)
+from bookings.models import Fixture, Pitch, PitchBooking, PitchLength, Team, Venue
 from django.test import TestCase
 
 # ... (Keep NormalizeTextTest, _make_team, _make_teams_qs, _make_empty_qs, FindBestTeamMatchTest as they are) ...
@@ -167,3 +176,569 @@ class FindBestPitchMatchTest(TestCase):
 
         # Falls back to first valid pitch
         self.assertEqual(result_outfield, 101)
+
+
+# ---------------------------------------------------------------------------
+# normalize_opponent & infer_season_year Tests
+# ---------------------------------------------------------------------------
+
+
+class NormalizeOpponentTest(TestCase):
+    def test_strips_common_club_words(self):
+        self.assertEqual(normalize_opponent("Poole CC"), "poole")
+        self.assertEqual(normalize_opponent("Poole Cricket Club"), "poole")
+        self.assertEqual(normalize_opponent("Dorchester Town CC"), "dorchester")
+
+    def test_ordinal_and_roman_conversions(self):
+        self.assertEqual(normalize_opponent("Dorchester II"), "dorchester 2nd")
+        self.assertEqual(normalize_opponent("Wimborne 1st XI"), "wimborne 1st")
+        self.assertEqual(normalize_opponent("Swanage Second XI"), "swanage 2nd")
+
+
+class InferSeasonYearTest(TestCase):
+    def test_infers_year_from_iso_dates(self):
+        dates = ["2026-05-16", "2026-05-23", "2026-06-06"]
+        self.assertEqual(infer_season_year(dates), 2026)
+
+    def test_infers_year_from_uk_dates(self):
+        dates = ["16/05/2026", "23/05/2026", "06/06/2026"]
+        self.assertEqual(infer_season_year(dates), 2026)
+
+    def test_empty_dates_falls_back_to_current_year(self):
+        from datetime import datetime
+
+        self.assertEqual(infer_season_year([]), datetime.now().year)
+
+
+class FindBestVenueMatchTest(TestCase):
+    def setUp(self):
+        self.v1 = Venue.objects.create(name="The Leaze", is_default=True)
+        self.v2 = Venue.objects.create(name="Dumpton School", is_default=False)
+
+    def test_matches_by_name(self):
+        venue = find_best_venue_match("Dumpton", Venue.objects.all())
+        self.assertEqual(venue.id, self.v2.id)
+
+    def test_falls_back_to_default_venue_on_no_match(self):
+        venue = find_best_venue_match("Unknown Ground", Venue.objects.all())
+        self.assertEqual(venue.id, self.v1.id)
+
+
+# ---------------------------------------------------------------------------
+# Play-Cricket Matching Tests
+# ---------------------------------------------------------------------------
+
+
+class PlayCricketMatchingTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="1st XI")
+        self.venue = Venue.objects.create(name="The Leaze", is_default=True)
+        self.pitch = Pitch.objects.create(venue=self.venue, name="Pitch 1", pitch_type="GRASS")
+
+        self.f1 = Fixture.objects.create(
+            team=self.team,
+            opponent="Dorchester CC",
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+            play_cricket_id="5001",
+        )
+        self.b1 = PitchBooking.objects.create(
+            fixture=self.f1,
+            pitch=self.pitch,
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+
+        self.f2 = Fixture.objects.create(
+            team=self.team,
+            opponent="Poole Town CC",
+            start_date="2026-05-23",
+            end_date="2026-05-23",
+            play_cricket_id="5002",
+        )
+        self.b2 = PitchBooking.objects.create(
+            fixture=self.f2,
+            pitch=self.pitch,
+            start_date="2026-05-23",
+            end_date="2026-05-23",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+
+        # Friendly fixture without play_cricket_id
+        self.friendly = Fixture.objects.create(
+            team=self.team,
+            opponent="Local Friendly XI",
+            start_date="2026-06-01",
+            end_date="2026-06-01",
+            play_cricket_id=None,
+        )
+
+    def test_exact_pc_id_match_unchanged(self):
+        incoming = [
+            {
+                "playCricketId": "5001",
+                "opponent": "Dorchester CC",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+            }
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=True
+        )
+        matched = next(r for r in results if r["playCricketId"] == "5001")
+        self.assertEqual(matched["action"], "UNCHANGED")
+        self.assertEqual(matched["existing_fixture_id"], self.f1.id)
+
+    def test_exact_pc_id_match_rescheduled_date(self):
+        incoming = [
+            {
+                "playCricketId": "5002",
+                "opponent": "Poole Town CC",
+                "date": "2026-05-30",  # Moved from 2026-05-23
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+            }
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=True
+        )
+        matched = next(r for r in results if r["playCricketId"] == "5002")
+        self.assertEqual(matched["action"], "RESCHEDULED")
+        self.assertEqual(matched["oldDate"], "2026-05-23")
+        self.assertEqual(matched["date"], "2026-05-30")
+        self.assertTrue(matched["selected"])
+
+    def test_new_fixture_in_play_cricket(self):
+        incoming = [
+            {
+                "playCricketId": "5003",
+                "opponent": "Broadstone CC",
+                "date": "2026-06-06",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+            }
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=True
+        )
+        matched = next(r for r in results if r["playCricketId"] == "5003")
+        self.assertEqual(matched["action"], "NEW")
+        self.assertTrue(matched["selected"])
+
+    def test_removed_fixture_in_play_cricket_flagged_for_removal_unchecked(self):
+        # Incoming only has 5001; 5002 is absent from incoming data
+        incoming = [
+            {
+                "playCricketId": "5001",
+                "opponent": "Dorchester CC",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+            }
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=True
+        )
+        removed = next((r for r in results if r.get("existing_fixture_id") == self.f2.id), None)
+        self.assertIsNotNone(removed)
+        self.assertEqual(removed["action"], "REMOVED")
+        self.assertFalse(removed["selected"])  # Must be unchecked by default for safety
+
+    def test_friendly_without_pc_id_preserved_never_flagged_as_removed(self):
+        incoming = [
+            {
+                "playCricketId": "5001",
+                "opponent": "Dorchester CC",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+            }
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=True
+        )
+        # self.friendly has no play_cricket_id, so it should NOT be in results as REMOVED
+        friendly_result = next(
+            (r for r in results if r.get("existing_fixture_id") == self.friendly.id), None
+        )
+        self.assertIsNone(friendly_result)
+
+
+# ---------------------------------------------------------------------------
+# Spreadsheet Heuristic Matching Tests
+# ---------------------------------------------------------------------------
+
+
+class SpreadsheetHeuristicMatchingTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="1st XI")
+
+    def test_single_db_single_data_exact_date_unchanged(self):
+        f = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        incoming = [
+            {"opponent": "Poole CC", "date": "2026-05-16", "time": "13:30", "timeSlot": "AFTERNOON"}
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["action"], "UNCHANGED")
+        self.assertEqual(results[0]["existing_fixture_id"], f.id)
+
+    def test_single_db_single_data_different_date_rescheduled(self):
+        f = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        incoming = [
+            {"opponent": "Poole CC", "date": "2026-05-23", "time": "13:30", "timeSlot": "AFTERNOON"}
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["action"], "RESCHEDULED")
+        self.assertEqual(results[0]["existing_fixture_id"], f.id)
+        self.assertEqual(results[0]["oldDate"], "2026-05-16")
+        self.assertEqual(results[0]["date"], "2026-05-23")
+
+    def test_two_db_two_data_one_exact_one_moved(self):
+        f1 = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        f2 = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-07-11", end_date="2026-07-11"
+        )
+        incoming = [
+            {
+                "opponent": "Poole CC",
+                "date": "2026-05-16",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            },
+            {
+                "opponent": "Poole CC",
+                "date": "2026-07-18",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            },
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        r_exact = next(r for r in results if r["date"] == "2026-05-16")
+        r_moved = next(r for r in results if r["date"] == "2026-07-18")
+
+        self.assertEqual(r_exact["action"], "UNCHANGED")
+        self.assertEqual(r_exact["existing_fixture_id"], f1.id)
+
+        self.assertEqual(r_moved["action"], "RESCHEDULED")
+        self.assertEqual(r_moved["existing_fixture_id"], f2.id)
+        self.assertEqual(r_moved["oldDate"], "2026-07-11")
+
+    def test_two_db_two_data_both_moved_matched_by_closest_distance(self):
+        f1 = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        f2 = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-07-11", end_date="2026-07-11"
+        )
+        incoming = [
+            {
+                "opponent": "Poole CC",
+                "date": "2026-05-23",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            },
+            {
+                "opponent": "Poole CC",
+                "date": "2026-07-18",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            },
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        r1 = next(r for r in results if r["date"] == "2026-05-23")
+        r2 = next(r for r in results if r["date"] == "2026-07-18")
+
+        self.assertEqual(r1["existing_fixture_id"], f1.id)
+        self.assertEqual(r1["oldDate"], "2026-05-16")
+        self.assertEqual(r2["existing_fixture_id"], f2.id)
+        self.assertEqual(r2["oldDate"], "2026-07-11")
+
+    def test_surplus_incoming_is_marked_new(self):
+        Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        incoming = [
+            {
+                "opponent": "Poole CC",
+                "date": "2026-05-16",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            },
+            {
+                "opponent": "Poole CC",
+                "date": "2026-07-18",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            },
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        r_new = next(r for r in results if r["date"] == "2026-07-18")
+        self.assertEqual(r_new["action"], "NEW")
+        self.assertTrue(r_new["selected"])
+
+    def test_surplus_db_is_marked_removed_unchecked_by_default(self):
+        f1 = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        f2 = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-07-11", end_date="2026-07-11"
+        )
+        incoming = [
+            {"opponent": "Poole CC", "date": "2026-05-16", "time": "13:30", "timeSlot": "AFTERNOON"}
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        r_rem = next(r for r in results if r["action"] == "REMOVED")
+        self.assertEqual(r_rem["existing_fixture_id"], f2.id)
+        self.assertFalse(r_rem["selected"])
+
+    def test_fuzzy_opponent_names_match(self):
+        f = Fixture.objects.create(
+            team=self.team,
+            opponent="Dorchester CC 1st XI",
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+        )
+        incoming = [
+            {
+                "opponent": "Dorchester Cricket Club",
+                "date": "2026-05-16",
+                "time": "13:30",
+                "timeSlot": "AFTERNOON",
+            }
+        ]
+        results = match_fixtures_for_refresh(
+            self.team.id, incoming, Fixture.objects.filter(team=self.team), is_play_cricket=False
+        )
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["existing_fixture_id"], f.id)
+
+
+# ---------------------------------------------------------------------------
+# Pitch Allocation & Venue Clash Tests
+# ---------------------------------------------------------------------------
+
+
+class PitchAllocationTest(TestCase):
+    def setUp(self):
+        self.team = Team.objects.create(name="1st XI")
+        self.v_home = Venue.objects.create(name="The Leaze", is_default=True)
+        self.pitch1 = Pitch.objects.create(
+            venue=self.v_home, name="Pitch 1", pitch_type="GRASS", entity_type="MAIN"
+        )
+        self.pitch2 = Pitch.objects.create(
+            venue=self.v_home, name="Pitch 2", pitch_type="GRASS", entity_type="MAIN"
+        )
+
+        self.v_alt = Venue.objects.create(name="Dumpton School", is_default=False)
+        self.pitch_alt = Pitch.objects.create(
+            venue=self.v_alt, name="Main Pitch", pitch_type="GRASS", entity_type="MAIN"
+        )
+
+    def test_preserves_pitch_on_exact_match(self):
+        f = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-05-16", end_date="2026-05-16"
+        )
+        PitchBooking.objects.create(
+            fixture=f,
+            pitch=self.pitch2,
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+        records = [
+            {
+                "action": "UNCHANGED",
+                "existing_fixture_id": f.id,
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            }
+        ]
+        allocated = allocate_pitches_for_matches(
+            records,
+            Venue.objects.all(),
+            Pitch.objects.all(),
+            PitchBooking.objects.all(),
+            self.team,
+        )
+        self.assertEqual(allocated[0]["pitchId"], self.pitch2.id)
+        self.assertTrue(allocated[0]["pitchPreserved"])
+
+    def test_multi_pitch_venue_allocates_vacant_pitch(self):
+        # Pitch 1 is booked on 2026-05-16
+        PitchBooking.objects.create(
+            pitch=self.pitch1,
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+        records = [
+            {
+                "action": "NEW",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            }
+        ]
+        allocated = allocate_pitches_for_matches(
+            records,
+            Venue.objects.all(),
+            Pitch.objects.all(),
+            PitchBooking.objects.all(),
+            self.team,
+        )
+        self.assertEqual(allocated[0]["pitchId"], self.pitch2.id)
+        self.assertFalse(allocated[0]["venueClash"])
+
+    def test_outfield_blocking_prevents_assignment(self):
+        # Pitch 1 blocks Pitch 2
+        self.pitch1.blocks_pitches.add(self.pitch2)
+
+        # Pitch 1 is booked
+        PitchBooking.objects.create(
+            pitch=self.pitch1,
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+        records = [
+            {
+                "action": "NEW",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            }
+        ]
+        allocated = allocate_pitches_for_matches(
+            records,
+            Venue.objects.all(),
+            Pitch.objects.all(),
+            PitchBooking.objects.all(),
+            self.team,
+        )
+        # All pitches at The Leaze are booked or blocked -> venue clash and suggests Dumpton School
+        self.assertTrue(allocated[0]["venueClash"])
+        self.assertEqual(allocated[0]["suggestedPitchId"], self.pitch_alt.id)
+        self.assertIn("Dumpton School", allocated[0]["clashReason"])
+
+    def test_pitch_length_compatibility_respected(self):
+        length_22 = PitchLength.objects.create(length_yards=22, description="22y")
+        length_19 = PitchLength.objects.create(length_yards=19, description="19y")
+
+        self.pitch1.supported_lengths.add(length_19)
+        self.pitch2.supported_lengths.add(length_22)
+
+        self.team.required_length = length_22
+        self.team.save()
+
+        records = [
+            {
+                "action": "NEW",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            }
+        ]
+        allocated = allocate_pitches_for_matches(
+            records,
+            Venue.objects.all(),
+            Pitch.objects.all(),
+            PitchBooking.objects.all(),
+            self.team,
+        )
+        # Pitch 2 supports 22y, so it must be selected
+        self.assertEqual(allocated[0]["pitchId"], self.pitch2.id)
+
+    def test_batch_collision_prevention(self):
+        records = [
+            {
+                "action": "NEW",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            },
+            {
+                "action": "NEW",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            },
+        ]
+        allocated = allocate_pitches_for_matches(
+            records,
+            Venue.objects.all(),
+            Pitch.objects.all(),
+            PitchBooking.objects.all(),
+            self.team,
+        )
+        # Both pitches should be distinct
+        assigned = {allocated[0]["pitchId"], allocated[1]["pitchId"]}
+        self.assertEqual(assigned, {self.pitch1.id, self.pitch2.id})
+
+    def test_all_venues_full_flags_critical_clash(self):
+        # Book Pitch 1, Pitch 2, and Pitch Alt
+        PitchBooking.objects.create(
+            pitch=self.pitch1, start_date="2026-05-16", end_date="2026-05-16", time_slot="ALL_DAY"
+        )
+        PitchBooking.objects.create(
+            pitch=self.pitch2, start_date="2026-05-16", end_date="2026-05-16", time_slot="ALL_DAY"
+        )
+        PitchBooking.objects.create(
+            pitch=self.pitch_alt,
+            start_date="2026-05-16",
+            end_date="2026-05-16",
+            time_slot="ALL_DAY",
+        )
+
+        records = [
+            {
+                "action": "NEW",
+                "date": "2026-05-16",
+                "timeSlot": "AFTERNOON",
+                "pitchPref": "The Leaze",
+                "teamId": self.team.id,
+            }
+        ]
+        allocated = allocate_pitches_for_matches(
+            records,
+            Venue.objects.all(),
+            Pitch.objects.all(),
+            PitchBooking.objects.all(),
+            self.team,
+        )
+        self.assertTrue(allocated[0]["venueClash"])
+        self.assertIsNone(allocated[0]["suggestedPitchId"])
+        self.assertIn("No pitches available across any venue", allocated[0]["clashReason"])
