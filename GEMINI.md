@@ -59,9 +59,17 @@ The backend is built with Django and Django REST Framework following a Test-Driv
 *   `/api/pitchbookings`: Booking lifecycle management with role-based auto-approval in `perform_create`.
 *   `/api/catering-requests`: Caterer review and status updates.
 *   `/api/booking-change-requests`: Creation and resolution of booking modification requests.
-*   `/api/fixtures/preview-play-cricket` & `/api/fixtures/commit-import`: Play-Cricket fixture fetching and fuzzy team matching (`bookings/matching.py`).
-*   `/api/fixtures/preview-spreadsheet`: CSV fixture import preview with header mapping and conflict detection.
+*   `/api/fixtures/preview-play-cricket` & `/api/fixtures/preview-spreadsheet`: Fixture preview and refresh analysis with team detection, heuristic matching, pitch preservation, alternative venue suggestions, and safe deletion flagging (`bookings/matching.py`).
+*   `/api/fixtures/commit-import`: Atomic batch commit supporting creation (`NEW`), in-place rescheduling/pitch updates (`RESCHEDULED`), pitch preservation (`UNCHANGED`), and deletion (`REMOVED`).
 *   `/api/health` & `/api/version`: Operational health check and build/git commit metadata service.
+
+### Fixture Synchronization & Refresh Engine
+*   **Team Selection Step**: Allows secretaries to select specific club teams to import or refresh. Only selected teams are processed; others remain untouched.
+*   **Play-Cricket ID Matching**: Matches existing fixtures by ECB `play_cricket_id`. Non-Play-Cricket fixtures (e.g. friendlies) are preserved untouched.
+*   **Spreadsheet Heuristic Matching**: For CSV imports without IDs, matches home fixtures using 1-to-1 pairing, exact date prioritization, closest date distance, and surplus/deficit analysis.
+*   **Pitch Preservation & Allocation**: Fixtures with matching date and venue retain their assigned pitch (`pitchPreserved: true`). New or moved fixtures are allocated vacant pitches respecting length and outfield blocking (`blocks_pitches`). If a venue has no vacant pitches, an alternative venue with compatible pitches is suggested (`venueClash: true`, `suggestedPitchId`).
+*   **Deletion Safety**: Fixtures present in the database but absent from the import feed are surfaced as `REMOVED`, highlighted with red deletion warnings, and left **unchecked by default** (`selected: false`).
+*   **Mock Play-Cricket Server**: `mock_play_cricket.py` supports scenario simulation via abstracted JSON files in `mock_data/play_cricket/` and can be toggled via web UI (`http://localhost:8001/`) or `/set-scenario/<name>`.
 
 ---
 

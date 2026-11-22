@@ -822,6 +822,47 @@ class PreviewSpreadsheetFixturesViewTest(APITestCase):
         response = self.client.post(self.url, {"rows": [row]}, format="json")
         self.assertFalse(response.data["rows"][0]["selected"])
 
+    def test_infers_season_and_returns_detected_teams(self):
+        row = {
+            "team": "1st XI",
+            "opponent": "Poole CC",
+            "date": "2026-08-01",
+            "time": "14:00",
+            "pitch": "Main Pitch",
+        }
+        response = self.client.post(self.url, {"rows": [row]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["inferred_season"], 2026)
+        self.assertEqual(len(response.data["detected_teams"]), 1)
+        self.assertEqual(response.data["detected_teams"][0]["team_id"], self.team.id)
+
+    def test_filters_by_selected_team_ids(self):
+        team2 = Team.objects.create(name="2nd XI")
+        rows = [
+            {"team": "1st XI", "opponent": "Poole CC", "date": "2026-08-01", "time": "14:00"},
+            {"team": "2nd XI", "opponent": "Swanage CC", "date": "2026-08-01", "time": "14:00"},
+        ]
+        response = self.client.post(
+            self.url, {"rows": rows, "selected_team_ids": [team2.id]}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["detected_teams"]), 2)
+        self.assertEqual(len(response.data["rows"]), 1)
+        self.assertEqual(response.data["rows"][0]["teamId"], team2.id)
+
+    def test_categorizes_rescheduled_and_removed(self):
+        f = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-08-01", end_date="2026-08-01"
+        )
+        row = {"team": "1st XI", "opponent": "Poole CC", "date": "2026-08-08", "time": "14:00"}
+        response = self.client.post(self.url, {"rows": [row]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        r = response.data["rows"][0]
+        self.assertEqual(r["action"], "RESCHEDULED")
+        self.assertEqual(r["existing_fixture_id"], f.id)
+        self.assertEqual(r["oldDate"], "2026-08-01")
+        self.assertEqual(r["date"], "2026-08-08")
+
 
 # ---------------------------------------------------------------------------
 # preview_play_cricket_fixtures_view
@@ -993,6 +1034,94 @@ class PreviewPlayCricketFixturesViewTest(APITestCase):
 
         self.assertEqual(response.data["rows"][0]["timeSlot"], "EVENING")
 
+    @patch("bookings.views.requests.get")
+    def test_detected_teams_and_selected_teams_filter(self, mock_get):
+        team2 = Team.objects.create(name="2nd XI")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "matches": [
+                {
+                    "id": "1001",
+                    "home_team_name": "1st XI",
+                    "away_team_name": "Poole CC",
+                    "match_date": "01/08/2026",
+                    "match_time": "14:00",
+                    "ground_name": "Home Ground",
+                    "ground_id": "1",
+                },
+                {
+                    "id": "1002",
+                    "home_team_name": "2nd XI",
+                    "away_team_name": "Swanage CC",
+                    "match_date": "01/08/2026",
+                    "match_time": "14:00",
+                    "ground_name": "Home Ground",
+                    "ground_id": "1",
+                },
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
+            response = self.client.post(
+                self.url, {"season": 2026, "selected_team_ids": [self.team.id]}, format="json"
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["detected_teams"]), 2)
+        # Scoped to self.team only
+        self.assertEqual(len(response.data["rows"]), 1)
+        self.assertEqual(response.data["rows"][0]["teamId"], self.team.id)
+
+    @patch("bookings.views.requests.get")
+    def test_categorizes_rescheduled_and_preserves_pitch(self, mock_get):
+        f = Fixture.objects.create(
+            team=self.team,
+            opponent="Poole CC",
+            start_date="2026-08-01",
+            end_date="2026-08-01",
+            play_cricket_id="1001",
+        )
+        PitchBooking.objects.create(
+            fixture=f,
+            pitch=self.pitch,
+            start_date="2026-08-01",
+            end_date="2026-08-01",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "matches": [
+                {
+                    "id": "1001",
+                    "home_team_name": "1st XI",
+                    "away_team_name": "Poole CC",
+                    "match_date": "01/08/2026",
+                    "match_time": "14:00",
+                    "ground_name": "Home Ground",
+                    "ground_id": "1",
+                }
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        with self.settings(
+            PLAY_CRICKET_SITE_ID="123", PLAY_CRICKET_API_KEY="abc", HOME_CLUB_NAME=""
+        ):
+            response = self.client.post(self.url, {"season": 2026}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        r = response.data["rows"][0]
+        self.assertEqual(r["action"], "UNCHANGED")
+        self.assertEqual(r["pitchId"], self.pitch.id)
+        self.assertTrue(r["pitchPreserved"])
+
 
 # ---------------------------------------------------------------------------
 # commit_fixtures_import_view
@@ -1111,3 +1240,57 @@ class CommitFixturesImportViewTest(APITestCase):
         self.client.post(self.url, {"rows": [row]}, format="json")
         booking = PitchBooking.objects.first()
         self.assertEqual(booking.notes, "Imported Fixture")
+
+    def test_action_removed_hard_deletes_fixture_and_booking(self):
+        fixture = Fixture.objects.create(
+            team=self.team, opponent="Old Opponent", start_date="2026-08-01", end_date="2026-08-01"
+        )
+        PitchBooking.objects.create(
+            fixture=fixture,
+            pitch=self.pitch,
+            start_date="2026-08-01",
+            end_date="2026-08-01",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+        row = {
+            "action": "REMOVED",
+            "existing_fixture_id": fixture.id,
+            "teamId": self.team.id,
+            "opponent": "Old Opponent",
+            "date": "2026-08-01",
+        }
+        response = self.client.post(self.url, {"rows": [row]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["deleted_count"], 1)
+        self.assertEqual(Fixture.objects.count(), 0)
+        self.assertEqual(PitchBooking.objects.count(), 0)
+
+    def test_action_rescheduled_updates_in_place(self):
+        fixture = Fixture.objects.create(
+            team=self.team, opponent="Poole CC", start_date="2026-08-01", end_date="2026-08-01"
+        )
+        booking = PitchBooking.objects.create(
+            fixture=fixture,
+            pitch=self.pitch,
+            start_date="2026-08-01",
+            end_date="2026-08-01",
+            time_slot="AFTERNOON",
+            status="APPROVED",
+        )
+        row = {
+            "action": "RESCHEDULED",
+            "existing_fixture_id": fixture.id,
+            "teamId": self.team.id,
+            "opponent": "Poole CC",
+            "date": "2026-08-15",
+            "timeSlot": "AFTERNOON",
+            "pitchId": self.pitch.id,
+        }
+        response = self.client.post(self.url, {"rows": [row]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["updated_count"], 1)
+        fixture.refresh_from_db()
+        booking.refresh_from_db()
+        self.assertEqual(str(fixture.start_date), "2026-08-15")
+        self.assertEqual(str(booking.start_date), "2026-08-15")

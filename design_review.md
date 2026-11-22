@@ -101,6 +101,8 @@ PitchWiz is a well-structured, feature-complete cricket pitch booking applicatio
 
 - **`perform_create` server-side auto-approval**: Determining booking status server-side in `perform_create` (rather than trusting the client-supplied `status` field) is the correct security pattern. The `read_only_fields = ["status", "rejection_reason", "requested_by"]` in the serializer reinforces this.
 
+- **Fixture & Booking Refresh Engine**: A comprehensive 4-step synchronization pipeline supporting Play-Cricket and CSV spreadsheets. Features robust opponent normalization, season inference, team selection scoping, heuristic date matching, exact-match pitch preservation (`pitchPreserved`), outfield overlap checking (`blocks_pitches`), alternative venue suggestions with one-click resolution (`suggestedPitchId`), and safe unselected-by-default hard deletion (`REMOVED`). Supported by a mock Play-Cricket scenario server with abstracted JSON fixtures and live scenario switching.
+
 ---
 
 ## Overall Assessment
