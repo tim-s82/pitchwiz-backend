@@ -12,7 +12,14 @@ from bookings.emails import (
     notify_secretaries_external_request,
     notify_secretaries_new_booking,
 )
-from bookings.matching import find_best_pitch_match, find_best_team_match
+from bookings.matching import (
+    allocate_pitches_for_matches,
+    find_best_pitch_match,
+    find_best_team_match,
+    find_best_venue_match,
+    infer_season_year,
+    match_fixtures_for_refresh,
+)
 from bookings.models import (
     BookingChangeRequest,
     CateringRequest,
@@ -468,10 +475,22 @@ def commit_fixtures_import_view(request):
 
     synced_count = 0
     updated_count = 0
+    deleted_count = 0
     errors = []
 
     with transaction.atomic():
         for idx, row in enumerate(rows):
+            action = row.get("action", "")
+            existing_fixture_id = row.get("existing_fixture_id")
+
+            # Handle REMOVED fixtures
+            if action == "REMOVED":
+                if existing_fixture_id:
+                    deleted_f_count, _ = Fixture.objects.filter(id=existing_fixture_id).delete()
+                    if deleted_f_count > 0:
+                        deleted_count += 1
+                continue
+
             team_id = row.get("teamId")
             opponent = row.get("opponent")
             date_str = row.get("date")
@@ -489,31 +508,42 @@ def commit_fixtures_import_view(request):
                 errors.append(f"Row {idx+1}: Invalid team assigned.")
                 continue
 
-            # Idempotency: Use Play-Cricket ID if available, otherwise match on team/opponent/date
-            if pc_id:
-                fixture, created = Fixture.objects.update_or_create(
-                    play_cricket_id=pc_id,
-                    defaults={
-                        "team": team_obj,
-                        "opponent": opponent,
-                        "start_date": date_str,
-                        "end_date": date_str,
-                    },
-                )
-            else:
-                fixture, created = Fixture.objects.get_or_create(
-                    team=team_obj,
-                    opponent=opponent,
-                    start_date=date_str,
-                    defaults={
-                        "end_date": date_str,
-                    },
-                )
+            fixture = None
+            if action == "RESCHEDULED" and existing_fixture_id:
+                fixture = Fixture.objects.filter(id=existing_fixture_id).first()
+                if fixture:
+                    fixture.team = team_obj
+                    fixture.opponent = opponent
+                    fixture.start_date = date_str
+                    fixture.end_date = date_str
+                    fixture.save()
+                    updated_count += 1
 
-            if created:
-                synced_count += 1
-            else:
-                updated_count += 1
+            if not fixture:
+                # Idempotency: Use Play-Cricket ID if available, otherwise match on team/opponent/date
+                if pc_id:
+                    fixture, created = Fixture.objects.update_or_create(
+                        play_cricket_id=pc_id,
+                        defaults={
+                            "team": team_obj,
+                            "opponent": opponent,
+                            "start_date": date_str,
+                            "end_date": date_str,
+                        },
+                    )
+                else:
+                    fixture, created = Fixture.objects.get_or_create(
+                        team=team_obj,
+                        opponent=opponent,
+                        start_date=date_str,
+                        defaults={
+                            "end_date": date_str,
+                        },
+                    )
+                if created:
+                    synced_count += 1
+                else:
+                    updated_count += 1
 
             # Auto-approve Pitch Booking if a pitch was assigned
             if pitch_id:
@@ -541,6 +571,7 @@ def commit_fixtures_import_view(request):
             "success": True,
             "synced_count": synced_count,
             "updated_count": updated_count,
+            "deleted_count": deleted_count,
             "errors": errors,
         },
         status=status.HTTP_200_OK,
@@ -551,8 +582,9 @@ def commit_fixtures_import_view(request):
 @permission_classes([IsAuthenticated])
 def preview_spreadsheet_fixtures_view(request):
     """
-    Accepts raw JSON rows from the uploaded spreadsheet, performs backend matching
-    for teams and pitches, validates fields, and returns processed rows for preview.
+    Accepts raw JSON rows from the uploaded spreadsheet, infers the season year,
+    detects teams present in the data, performs matching and pitch allocation.
+    Supports filtering by selected_team_ids.
     """
     raw_rows = request.data.get("rows", [])
     if not raw_rows:
@@ -560,15 +592,29 @@ def preview_spreadsheet_fixtures_view(request):
             {"detail": "No rows provided for preview."}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    teams = list(Team.objects.all())
-    # Prefetch supported lengths to prevent N+1 DB queries in the matching loop
-    pitches = Pitch.objects.prefetch_related("supported_lengths").all()
-    venues = Venue.objects.all()
+    selected_team_ids = request.data.get("selected_team_ids")
+    if selected_team_ids is not None:
+        selected_team_ids = [int(tid) for tid in selected_team_ids]
 
-    processed_rows = []
+    teams = list(Team.objects.all())
+    pitches = list(
+        Pitch.objects.filter(is_active=True).prefetch_related("supported_lengths", "blocks_pitches")
+    )
+    venues = list(Venue.objects.all())
+
+    # Infer season from row dates
+    raw_dates = []
+    for r in raw_rows:
+        norm_r = {k.strip().lower().replace(" ", "_"): v for k, v in r.items()}
+        d = str(norm_r.get("date") or norm_r.get("match_date") or norm_r.get("day") or "").strip()
+        if d:
+            raw_dates.append(d)
+    inferred_season = infer_season_year(raw_dates)
+
+    parsed_incoming_by_team = {}
+    team_meta = {}
 
     for index, row in enumerate(raw_rows):
-        # Normalize incoming dict keys
         norm_row = {k.strip().lower().replace(" ", "_"): v for k, v in row.items()}
 
         team_name_raw = str(
@@ -588,17 +634,10 @@ def preview_spreadsheet_fixtures_view(request):
             norm_row.get("pitch_preference") or norm_row.get("pitch") or norm_row.get("venue") or ""
         ).strip()
 
-        # Run backend matching algorithms
         team_match = find_best_team_match(team_name_raw, teams)
+        team_id = team_match["team_id"]
+        team_ambiguous = team_match["ambiguous"]
 
-        # Find the actual team object to pass for pitch length validation
-        team_obj = next((t for t in teams if t.id == team_match["team_id"]), None)
-
-        matched_pitch_id = find_best_pitch_match(
-            pitch_pref, pitches, venues, team_id=team_match["team_id"], teams_qs=teams
-        )
-
-        # Time slot derivation
         hour = (
             int(time_str.split(":")[0])
             if ":" in time_str and time_str.split(":")[0].isdigit()
@@ -611,7 +650,6 @@ def preview_spreadsheet_fixtures_view(request):
         else:
             time_slot = "AFTERNOON"
 
-        # Validation / Clash checks
         clash_reason = None
         if not team_name_raw:
             clash_reason = "Missing team name"
@@ -620,24 +658,119 @@ def preview_spreadsheet_fixtures_view(request):
         elif not date_str:
             clash_reason = "Missing match date"
 
-        processed_rows.append(
+        parsed_row = {
+            "id": f"row_{index}",
+            "teamNameRaw": team_name_raw,
+            "teamId": team_id,
+            "teamAmbiguous": team_ambiguous,
+            "opponent": opponent,
+            "date": date_str,
+            "time": time_str,
+            "timeSlot": time_slot,
+            "pitchPref": pitch_pref,
+            "clashReason": clash_reason,
+            "selected": not clash_reason,
+        }
+
+        if team_id:
+            parsed_incoming_by_team.setdefault(team_id, []).append(parsed_row)
+            if team_id not in team_meta:
+                t_obj = next((t for t in teams if t.id == team_id), None)
+                team_meta[team_id] = {
+                    "team_id": team_id,
+                    "team_name": t_obj.name if t_obj else team_name_raw,
+                    "ambiguous": team_ambiguous,
+                }
+        else:
+            # Row has no matched team, keep it for clash visibility
+            parsed_incoming_by_team.setdefault(None, []).append(parsed_row)
+
+    # Also detect teams with existing fixtures in the DB for this season
+    existing_team_ids = set(
+        Fixture.objects.filter(start_date__year=inferred_season)
+        .values_list("team_id", flat=True)
+        .distinct()
+    )
+    for tid in existing_team_ids:
+        if tid and tid not in team_meta:
+            t_obj = next((t for t in teams if t.id == tid), None)
+            if t_obj:
+                team_meta[tid] = {
+                    "team_id": tid,
+                    "team_name": t_obj.name,
+                    "ambiguous": False,
+                }
+
+    detected_teams = []
+    for tid, meta in team_meta.items():
+        incoming_count = len(parsed_incoming_by_team.get(tid, []))
+        existing_count = Fixture.objects.filter(
+            team_id=tid, start_date__year=inferred_season
+        ).count()
+        detected_teams.append(
             {
-                "id": index,
-                "teamNameRaw": team_name_raw,
-                "teamId": team_match["team_id"],
-                "teamAmbiguous": team_match["ambiguous"],
-                "opponent": opponent,
-                "date": date_str,
-                "time": time_str,
-                "timeSlot": time_slot,
-                "pitchPref": pitch_pref,
-                "pitchId": matched_pitch_id,
-                "clashReason": clash_reason,
-                "selected": not clash_reason,
+                "team_id": tid,
+                "team_name": meta["team_name"],
+                "incoming_count": incoming_count,
+                "existing_count": existing_count,
+                "ambiguous": meta["ambiguous"],
             }
         )
 
-    return Response({"success": True, "rows": processed_rows}, status=status.HTTP_200_OK)
+    valid_team_ids = [tid for tid in team_meta.keys() if tid is not None]
+    teams_to_process = (
+        [tid for tid in valid_team_ids if tid in selected_team_ids]
+        if selected_team_ids is not None
+        else valid_team_ids
+    )
+
+    all_processed_rows = []
+    all_bookings = list(
+        PitchBooking.objects.filter(
+            status__in=["PENDING", "APPROVED"],
+            start_date__year=inferred_season,
+        ).select_related("pitch", "fixture")
+    )
+
+    for tid in teams_to_process:
+        t_rows = parsed_incoming_by_team.get(tid, [])
+        t_obj = next((t for t in teams if t.id == tid), None)
+        existing_fixtures = list(
+            Fixture.objects.filter(team_id=tid, start_date__year=inferred_season).select_related(
+                "pitchbooking__pitch"
+            )
+        )
+
+        matched_records = match_fixtures_for_refresh(
+            team_id=tid,
+            incoming_rows=t_rows,
+            existing_fixtures_qs=existing_fixtures,
+            is_play_cricket=False,
+        )
+
+        allocated_records = allocate_pitches_for_matches(
+            records=matched_records,
+            venues_qs=venues,
+            pitches_qs=pitches,
+            existing_bookings_qs=all_bookings,
+            team_obj=t_obj,
+        )
+
+        all_processed_rows.extend(allocated_records)
+
+    # Include unmatched team rows if not filtering or if selected_team_ids is None
+    if selected_team_ids is None and None in parsed_incoming_by_team:
+        all_processed_rows.extend(parsed_incoming_by_team[None])
+
+    return Response(
+        {
+            "success": True,
+            "inferred_season": inferred_season,
+            "detected_teams": detected_teams,
+            "rows": all_processed_rows,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
@@ -645,13 +778,12 @@ def preview_spreadsheet_fixtures_view(request):
 def preview_play_cricket_fixtures_view(request):
     """
     Fetches raw fixtures from ECB Play-Cricket v2 API, runs backend team and ground matching,
-    filters for HOME fixtures only, and returns enriched rows for frontend review and adjustment.
+    detects teams present in the data, filters for HOME fixtures only, and returns enriched
+    rows with change categorization (NEW, RESCHEDULED, UNCHANGED, REMOVED) and pitch allocation.
     """
     site_id = getattr(settings, "PLAY_CRICKET_SITE_ID", None)
     api_token = getattr(settings, "PLAY_CRICKET_API_KEY", None)
     base_url = getattr(settings, "PLAY_CRICKET_URL", "http://play-cricket.com")
-
-    # Get the home club name setting to filter away fixtures
     home_club_name = getattr(settings, "HOME_CLUB_NAME", "").lower()
 
     if not site_id or not api_token:
@@ -661,6 +793,10 @@ def preview_play_cricket_fixtures_view(request):
         )
 
     season = request.data.get("season", datetime.now().year)
+    selected_team_ids = request.data.get("selected_team_ids")
+    if selected_team_ids is not None:
+        selected_team_ids = [int(tid) for tid in selected_team_ids]
+
     endpoint = f"{base_url.rstrip('/')}/api/v2/matches.json"
     params = {"api_token": api_token, "site_id": site_id, "season": season}
 
@@ -675,12 +811,16 @@ def preview_play_cricket_fixtures_view(request):
         data = response.json()
         raw_fixtures = data.get("matches", [])
 
-        teams = list(Team.objects.all())  # Convert to list for efficient memory lookup
-        # Prefetch supported lengths to prevent N+1 DB queries in the matching loop
-        pitches = Pitch.objects.prefetch_related("supported_lengths").all()
-        venues = Venue.objects.all()
+        teams = list(Team.objects.all())
+        pitches = list(
+            Pitch.objects.filter(is_active=True).prefetch_related(
+                "supported_lengths", "blocks_pitches"
+            )
+        )
+        venues = list(Venue.objects.all())
 
-        processed_rows = []
+        parsed_incoming_by_team = {}
+        team_meta = {}
 
         for index, match in enumerate(raw_fixtures):
             home_team_name = match.get("home_team_name", "").strip()
@@ -694,15 +834,12 @@ def preview_play_cricket_fixtures_view(request):
             date_str = match.get("match_date", "").strip()
             time_str = match.get("match_time", "14:00").strip()
             ground_name = match.get("ground_name", "").strip()
-            ground_id = match.get("ground_id", "").strip()
 
-            # Because we filtered for home games, our team is always the home team
             team_match = find_best_team_match(home_team_name, teams)
             opponent = away_team_name
             team_id = team_match["team_id"]
             team_ambiguous = team_match["ambiguous"]
 
-            # If home team didn't match well, check away team ... (keep existing logic)
             if not any(t.id == team_id for t in teams) or (
                 home_team_name and not team_match["team_id"]
             ):
@@ -712,21 +849,11 @@ def preview_play_cricket_fixtures_view(request):
                     team_ambiguous = away_team_match["ambiguous"]
                     opponent = home_team_name
 
-            # Find the actual team object to pass for pitch length validation
-            team_obj = next((t for t in teams if t.id == team_id), None)
-
-            # Date parsing (DD/MM/YYYY)
             try:
                 parsed_date = datetime.strptime(date_str, "%d/%m/%Y").date().isoformat()
             except ValueError:
                 parsed_date = ""
 
-            # Match pitch/ground using the team's length requirement
-            matched_pitch_id = find_best_pitch_match(
-                ground_name, pitches, venues, team_id=team_id, teams_qs=teams
-            )
-
-            # Time slot derivation
             hour = (
                 int(time_str.split(":")[0])
                 if ":" in time_str and time_str.split(":")[0].isdigit()
@@ -745,25 +872,116 @@ def preview_play_cricket_fixtures_view(request):
             elif not team_id:
                 clash_reason = "Unmatched team"
 
-            processed_rows.append(
+            parsed_row = {
+                "id": f"row_{index}",
+                "playCricketId": pc_id,
+                "teamNameRaw": home_team_name,
+                "teamId": team_id,
+                "teamAmbiguous": team_ambiguous,
+                "opponent": opponent,
+                "date": parsed_date,
+                "time": time_str,
+                "timeSlot": time_slot,
+                "pitchPref": ground_name,
+                "clashReason": clash_reason,
+                "selected": not clash_reason,
+            }
+
+            if team_id:
+                parsed_incoming_by_team.setdefault(team_id, []).append(parsed_row)
+                if team_id not in team_meta:
+                    t_obj = next((t for t in teams if t.id == team_id), None)
+                    team_meta[team_id] = {
+                        "team_id": team_id,
+                        "team_name": t_obj.name if t_obj else home_team_name,
+                        "ambiguous": team_ambiguous,
+                    }
+            else:
+                parsed_incoming_by_team.setdefault(None, []).append(parsed_row)
+
+        # Also detect teams with existing fixtures in the DB for this season
+        existing_team_ids = set(
+            Fixture.objects.filter(start_date__year=season)
+            .values_list("team_id", flat=True)
+            .distinct()
+        )
+        for tid in existing_team_ids:
+            if tid and tid not in team_meta:
+                t_obj = next((t for t in teams if t.id == tid), None)
+                if t_obj:
+                    team_meta[tid] = {
+                        "team_id": tid,
+                        "team_name": t_obj.name,
+                        "ambiguous": False,
+                    }
+
+        detected_teams = []
+        for tid, meta in team_meta.items():
+            incoming_count = len(parsed_incoming_by_team.get(tid, []))
+            existing_count = Fixture.objects.filter(team_id=tid, start_date__year=season).count()
+            detected_teams.append(
                 {
-                    "id": index,
-                    "playCricketId": pc_id,
-                    "teamNameRaw": home_team_name,
-                    "teamId": team_id,
-                    "teamAmbiguous": team_ambiguous,
-                    "opponent": opponent,
-                    "date": parsed_date,
-                    "time": time_str,
-                    "timeSlot": time_slot,
-                    "pitchPref": ground_name,
-                    "pitchId": matched_pitch_id,
-                    "clashReason": clash_reason,
-                    "selected": not clash_reason,
+                    "team_id": tid,
+                    "team_name": meta["team_name"],
+                    "incoming_count": incoming_count,
+                    "existing_count": existing_count,
+                    "ambiguous": meta["ambiguous"],
                 }
             )
 
-        return Response({"success": True, "rows": processed_rows}, status=status.HTTP_200_OK)
+        valid_team_ids = [tid for tid in team_meta.keys() if tid is not None]
+        teams_to_process = (
+            [tid for tid in valid_team_ids if tid in selected_team_ids]
+            if selected_team_ids is not None
+            else valid_team_ids
+        )
+
+        all_processed_rows = []
+        all_bookings = list(
+            PitchBooking.objects.filter(
+                status__in=["PENDING", "APPROVED"],
+                start_date__year=season,
+            ).select_related("pitch", "fixture")
+        )
+
+        for tid in teams_to_process:
+            t_rows = parsed_incoming_by_team.get(tid, [])
+            t_obj = next((t for t in teams if t.id == tid), None)
+            existing_fixtures = list(
+                Fixture.objects.filter(team_id=tid, start_date__year=season).select_related(
+                    "pitchbooking__pitch"
+                )
+            )
+
+            matched_records = match_fixtures_for_refresh(
+                team_id=tid,
+                incoming_rows=t_rows,
+                existing_fixtures_qs=existing_fixtures,
+                is_play_cricket=True,
+            )
+
+            allocated_records = allocate_pitches_for_matches(
+                records=matched_records,
+                venues_qs=venues,
+                pitches_qs=pitches,
+                existing_bookings_qs=all_bookings,
+                team_obj=t_obj,
+            )
+
+            all_processed_rows.extend(allocated_records)
+
+        if selected_team_ids is None and None in parsed_incoming_by_team:
+            all_processed_rows.extend(parsed_incoming_by_team[None])
+
+        return Response(
+            {
+                "success": True,
+                "season": season,
+                "detected_teams": detected_teams,
+                "rows": all_processed_rows,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     except requests.RequestException as req_err:
         return Response(
